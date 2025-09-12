@@ -1,32 +1,42 @@
 [
-    {
-        "username": "juan",
-        "password": "1234",
-        "role": "admin"
-    },
-    {
-        "username": "maria",
-        "password": "abcd",
-        "role": "user"
-    },
-    {
-        "username": "pedro",
-        "password": "1234",
-        "role": "admin"
-    },
-    {
-        "username": "messi",
-        "password": "1234",
-        "role": "admin"
-    },
-    {
-        "username": "messi10",
-        "password": "1234",
-        "role": "admin"
-    },
-    {
-        "username": "juan5",
-        "password": "1234",
-        "role": "admin"
-    }
+  {
+    "username": "juan",
+    "password": "1234"
+  },
+  {
+    "username": "maria",
+    "password": "abcd"
+  },
+  {
+    "username": "pedro",
+    "password": "1234"
+  },
+  {
+    "username": "messi",
+    "password": "1234"
+  },
+  {
+    "username": "messi10",
+    "password": "1234"
+  },
+  {
+    "username": "juan5",
+    "password": "1234"
+  },
+  {
+    "username": "asdsadasdsa",
+    "password": "dsasdsaa"
+  },
+  {
+    "username": "adsad",
+    "password": "asdasdada"
+  },
+  {
+    "username": "asdsad",
+    "password": "dsadada"
+  },
+  {
+    "username": "asda",
+    "password": "dasdsa"
+  }
 ]

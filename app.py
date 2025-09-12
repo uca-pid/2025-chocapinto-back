@@ -1,8 +1,10 @@
 from flask import Flask, request, jsonify
 import json
 import os
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 USERS_FILE = "users.json"
 
@@ -24,12 +26,12 @@ def save_users(users):
 # --- Registro ---
 @app.route("/register", methods=["POST"])
 def register():
+    print("📥 Llegó al backend /register")
     data = request.get_json()
     username = data.get("username")
     password = data.get("password")
-    role = data.get("role")
 
-    if not username or not password or not role:
+    if not username or not password:
         return jsonify({"success": False, "message": "Faltan datos"}), 400
 
     users = load_users()
@@ -38,7 +40,8 @@ def register():
     if any(u["username"] == username for u in users):
         return jsonify({"success": False, "message": "El usuario ya existe"}), 400
 
-    users.append({"username": username, "password": password, "role": role})
+    # Agregar nuevo usuario
+    users.append({"username": username, "password": password})
     save_users(users)
 
     return jsonify({"success": True, "message": "Usuario registrado con éxito"}), 201
@@ -46,6 +49,7 @@ def register():
 # --- Login ---
 @app.route("/login", methods=["POST"])
 def login():
+    print("📥 Llegó al backend /login")
     data = request.get_json()
     username = data.get("username")
     password = data.get("password")
@@ -59,8 +63,7 @@ def login():
         if user["username"] == username and user["password"] == password:
             return jsonify({
                 "success": True,
-                "message": "Login exitoso",
-                "role": user["role"]
+                "message": "Login exitoso"
             }), 200
 
     return jsonify({"success": False, "message": "Usuario o contraseña incorrectos"}), 401
