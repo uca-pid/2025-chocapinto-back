@@ -16,10 +16,21 @@ model User {
   clubs    Club[] @relation("ClubMembers")
 }
 
+
 model Club {
   id          Int    @id @default(autoincrement())
   name        String
   description String
   id_owner    Int
   members     User[] @relation("ClubMembers")
+  readBooks       Book[] @relation("ClubBooks")
+}
+
+model Book {
+  id        Int      @id @default(autoincrement())
+  title     String
+  author    String?
+
+  // back relation (no join model defined — Prisma creates it implicitly)
+  clubs     Club[]   @relation("ClubBooks")
 }
