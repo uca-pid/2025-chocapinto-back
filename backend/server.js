@@ -1,3 +1,4 @@
+
 const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 const cors = require("cors");
@@ -7,7 +8,17 @@ const prisma = new PrismaClient();
 
 app.use(cors());
 app.use(express.json());
-
+// Obtener datos de usuario por username
+app.get("/user/:username", async (req, res) => {
+  const username = req.params.username;
+  try {
+    const user = await prisma.user.findUnique({ where: { username } });
+    if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+    res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error del servidor" });
+  }
+});
 // Registro
 app.post("/register", async (req, res) => {
   const { username, email, password } = req.body;
