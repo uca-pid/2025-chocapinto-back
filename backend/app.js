@@ -282,4 +282,29 @@ app.get("/books", async (req, res) => {
   }
 });
 
+//API Google Books
+
+
+const GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1/volumes";
+
+app.get("/books/search", async (req, res) => {
+  const { query } = req.query;
+  if (!query) {
+    return res.status(400).json({ success: false, message: "Falta el parámetro de búsqueda" });
+  }
+  try {
+    const response = await axios.get(GOOGLE_BOOKS_API_URL, {
+      params: {
+        q: query,
+        key: process.env.GOOGLE_BOOKS_API_KEY
+      }
+    });
+    res.json({ success: true, books: response.data.items });
+  } catch (error) {
+    console.error("Error al buscar libros en Google Books:", error);
+    res.status(500).json({ success: false, message: "Error al buscar libros en Google Books" });
+  }
+});
+
 module.exports = app;
+
