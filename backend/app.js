@@ -8,10 +8,15 @@ app.use(cors());
 app.use(express.json());
 
 // Obtener datos de usuario por username
-app.get("/user/:username", async (req, res) => {
-  const username = req.params.username;
+app.get("/user/:idOrUsername", async (req, res) => {
+  const idOrUsername = req.params.idOrUsername;
+  let user = null;
   try {
-    const user = await prisma.user.findUnique({ where: { username } });
+    if (!isNaN(Number(idOrUsername))) {
+      user = await prisma.user.findUnique({ where: { id: Number(idOrUsername) } });
+    } else {
+      user = await prisma.user.findUnique({ where: { username: idOrUsername } });
+    }
     if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
     res.json({ success: true, user });
   } catch (error) {
@@ -151,7 +156,8 @@ app.get("/clubs", async (req, res) => {
   }
 });
 // Unirse a un club
-app.post("/joinClub", async (req, res) => {
+// Crear solicitud de ingreso a club
+app.post("/clubSolicitud", async (req, res) => {
   try {
     const { clubId, username } = req.body;
     if (!clubId || !username) return res.status(400).json({ success: false, message: "Faltan datos" });
@@ -159,25 +165,34 @@ app.post("/joinClub", async (req, res) => {
     const user = await prisma.user.findUnique({ where: { username } });
     if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
+    // Revisar si ya existe una solicitud pendiente
+    const solicitudExistente = await prisma.clubSolicitud.findFirst({
+      where: { clubId: Number(clubId), userId: user.id, estado: "pendiente" }
+    });
+    if (solicitudExistente) {
+      return res.json({ success: false, message: "Ya tienes una solicitud pendiente" });
+    }
+
     // Revisar si ya es miembro
     const club = await prisma.club.findUnique({
-      where: { id: clubId },
+      where: { id: Number(clubId) },
       include: { members: true }
     });
-
     if (club.members.some(m => m.id === user.id)) {
       return res.json({ success: false, message: "Ya eres miembro del club" });
     }
 
-    // Conectar al usuario como miembro
-    await prisma.club.update({
-      where: { id: clubId },
-      data: { members: { connect: { id: user.id } } }
+    // Crear solicitud
+    const solicitud = await prisma.clubSolicitud.create({
+      data: {
+        clubId: Number(clubId),
+        userId: user.id,
+        estado: "pendiente"
+      }
     });
-
-    res.json({ success: true, message: "Te uniste al club correctamente" });
+    res.json({ success: true, message: "Solicitud enviada", solicitud });
   } catch (error) {
-    console.error("Error al unirse al club:", error);
+    console.error("Error al crear solicitud de ingreso:", error);
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 });
@@ -188,10 +203,32 @@ app.get("/club/:id", async (req, res) => {
   try {
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      include: { readBooks: true }
+      include: {
+        readBooks: true,
+        solicitudes: {
+          include: { user: true }
+        },
+        members: true
+      }
     });
-    console.log("GET /club/:id", { clubId, club });
+    // console.log("GET /club/:id", { clubId, club });
     if (!club) return res.status(404).json({ success: false, message: "Club no encontrado" });
+    // Si no hay solicitudes, devolver array vacío
+    const solicitudes = club.solicitudes ? club.solicitudes.map(s => ({
+      id: s.id,
+      username: s.user.username,
+      estado: s.estado,
+      createdAt: s.createdAt
+    })) : [];
+    // Buscar nombre del owner
+    let ownerName = null;
+    if (club.owner) {
+      ownerName = club.owner.username;
+    } else {
+      // Si no existe la relación, buscar manualmente
+      const ownerUser = await prisma.user.findUnique({ where: { id: club.id_owner } });
+      ownerName = ownerUser ? ownerUser.username : null;
+    }
     res.json({
       success: true,
       club: {
@@ -199,9 +236,13 @@ app.get("/club/:id", async (req, res) => {
         name: club.name,
         description: club.description,
         id_owner: club.id_owner,
-        readBooks: club.readBooks
+        ownerName,
+        readBooks: club.readBooks,
+        solicitudes,
+        members: club.members ? club.members.map(m => ({ id: m.id, username: m.username })) : []
       },
     });
+    console.log("Club encontrado:", club);
   } catch (error) {
     res.status(500).json({ success: false, message: "Error al buscar club" });
   }
@@ -210,8 +251,8 @@ app.get("/club/:id", async (req, res) => {
 
 app.post("/club/:id/addBook", async (req, res) => {
   const clubId = Number(req.params.id);
-  const { title, author } = req.body;
-  console.log("Datos recibidos en /club/:id/addBook:", { clubId, title, author });
+  const { title, author, id_api, thumbnail } = req.body;
+  console.log("Datos recibidos en /club/:id/addBook:", { clubId, title, author, id_api, thumbnail });
   if (!clubId || !title) {
     return res.status(400).json({ success: false, message: "Faltan datos obligatorios" });
   }
@@ -221,6 +262,8 @@ app.post("/club/:id/addBook", async (req, res) => {
       data: {
         title,
         author,
+        id_api: id_api ? Number(id_api) : undefined,
+        portada: thumbnail || undefined,
         clubs: { connect: { id: clubId } }
       }
     });
@@ -232,6 +275,45 @@ app.post("/club/:id/addBook", async (req, res) => {
 }); 
 
 // Eliminar libro leído del club (solo owner)
+// Aceptar o rechazar solicitud de ingreso a club
+app.put("/club/:clubId/solicitud/:solicitudId", async (req, res) => {
+  const clubId = Number(req.params.clubId);
+  const solicitudId = Number(req.params.solicitudId);
+  const { aceptar } = req.body;
+  if (!clubId || !solicitudId || typeof aceptar !== "boolean") {
+    return res.status(400).json({ success: false, message: "Faltan datos" });
+  }
+  try {
+    // Buscar la solicitud
+    const solicitud = await prisma.clubSolicitud.findUnique({
+      where: { id: solicitudId },
+      include: { user: true, club: true }
+    });
+    if (!solicitud || solicitud.clubId !== clubId) {
+      return res.status(404).json({ success: false, message: "Solicitud no encontrada" });
+    }
+    if (solicitud.estado !== "pendiente") {
+      return res.status(400).json({ success: false, message: "La solicitud ya fue gestionada" });
+    }
+    // Actualizar estado
+    const nuevoEstado = aceptar ? "aceptada" : "rechazada";
+    await prisma.clubSolicitud.update({
+      where: { id: solicitudId },
+      data: { estado: nuevoEstado }
+    });
+    // Si se acepta, agregar usuario al club
+    if (aceptar) {
+      await prisma.club.update({
+        where: { id: clubId },
+        data: { members: { connect: { id: solicitud.userId } } }
+      });
+    }
+    res.json({ success: true, message: aceptar ? "Usuario agregado al club" : "Solicitud rechazada" });
+  } catch (error) {
+    console.error("Error al gestionar solicitud:", error);
+    res.status(500).json({ success: false, message: "Error del servidor" });
+  }
+});
 app.delete("/club/:id/deleteBook/:bookId", async (req, res) => {
   const clubId = Number(req.params.id);
   const bookId = Number(req.params.bookId);
@@ -304,6 +386,24 @@ app.get("/books/search", async (req, res) => {
     console.error("Error al buscar libros en Google Books:", error);
     res.status(500).json({ success: false, message: "Error al buscar libros en Google Books" });
   }
+});
+app.delete("/club/:clubId/removeMember/:userId", async (req, res) => {
+    const clubId = Number(req.params.clubId);
+    const userId = Number(req.params.userId);
+    try {
+        // Verifica que el usuario a eliminar no sea el owner
+        const club = await prisma.club.findUnique({ where: { id: clubId } });
+        if (club.id_owner === userId) {
+            return res.status(400).json({ success: false, message: "No puedes eliminar al moderador" });
+        }
+        await prisma.club.update({
+            where: { id: clubId },
+            data: { members: { disconnect: { id: userId } } }
+        });
+        res.json({ success: true, message: "Usuario eliminado del club" });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Error al eliminar usuario" });
+    }
 });
 
 module.exports = app;
