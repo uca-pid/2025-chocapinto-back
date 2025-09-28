@@ -52,8 +52,13 @@ model Book {
   author    String?
   id_api    Int?
   portada   String?
-
+  categorias  Categoria[] @relation("BookCategorias")
   // back relation (no join model defined — Prisma creates it implicitly)
   clubs     Club[]   @relation("ClubBooks")//desp lo borramos y poenmos clubsBooks ClubBook[]
 
+}
+model Categoria {
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  libros Book[]  @relation("BookCategorias")
 }

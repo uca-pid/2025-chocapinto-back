@@ -204,7 +204,9 @@ app.get("/club/:id", async (req, res) => {
     const club = await prisma.club.findUnique({
       where: { id: clubId },
       include: {
-        readBooks: true,
+        readBooks: {
+          include: { categorias: true }
+        },
         solicitudes: {
           include: { user: true }
         },
@@ -237,12 +239,21 @@ app.get("/club/:id", async (req, res) => {
         description: club.description,
         id_owner: club.id_owner,
         ownerName,
-        readBooks: club.readBooks,
+        readBooks: club.readBooks.map(book => ({
+          id: book.id,
+          title: book.title,
+          author: book.author,
+          portada: book.portada,
+          id_api: book.id_api,
+          categorias: book.categorias ? book.categorias.map(cat => ({ id: cat.id, nombre: cat.nombre })) : []
+        })),
         solicitudes,
         members: club.members ? club.members.map(m => ({ id: m.id, username: m.username })) : []
       },
     });
     console.log("Club encontrado:", club);
+  
+
   } catch (error) {
     res.status(500).json({ success: false, message: "Error al buscar club" });
   }
@@ -251,20 +262,26 @@ app.get("/club/:id", async (req, res) => {
 
 app.post("/club/:id/addBook", async (req, res) => {
   const clubId = Number(req.params.id);
-  const { title, author, id_api, thumbnail } = req.body;
-  console.log("Datos recibidos en /club/:id/addBook:", { clubId, title, author, id_api, thumbnail });
+  const { title, author, id_api, thumbnail, categorias } = req.body;
+  console.log("Datos recibidos en /club/:id/addBook:", { clubId, title, author, id_api, thumbnail, categorias });
   if (!clubId || !title) {
     return res.status(400).json({ success: false, message: "Faltan datos obligatorios" });
   }
   try {
-    // Crear el libro y asociarlo al club
+    // Conectar categorías existentes (por id)
+    let categoriasConnect = [];
+    if (Array.isArray(categorias)) {
+      categoriasConnect = categorias.map(id => ({ id: Number(id) }));
+    }
+    // Crear el libro y asociarlo al club y categorías
     const book = await prisma.book.create({
       data: {
         title,
         author,
         id_api: id_api ? Number(id_api) : undefined,
         portada: thumbnail || undefined,
-        clubs: { connect: { id: clubId } }
+        clubs: { connect: { id: clubId } },
+        categorias: { connect: categoriasConnect }
       }
     });
     res.json({ success: true, message: "Libro agregado", book });
@@ -404,6 +421,43 @@ app.delete("/club/:clubId/removeMember/:userId", async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, message: "Error al eliminar usuario" });
     }
+});
+// Listar todas las categorías
+const categoriasEstaticas = [
+  "Ficción",
+  "No Ficción",
+  "Ciencia Ficción",
+  "Fantasía",
+  "Ensayo"
+];
+
+app.get("/categorias", async (req, res) => {
+  try {
+    // Insertar las categorías por defecto si no existen
+    for (const nombre of categoriasEstaticas) {
+      await prisma.categoria.upsert({
+        where: { nombre },
+        update: {},
+        create: { nombre }
+      });
+    }
+    const categorias = await prisma.categoria.findMany();
+    res.json({ success: true, categorias });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error al obtener categorías" });
+  }
+});
+
+// Crear nueva categoría
+app.post("/categorias", async (req, res) => {
+  const { nombre } = req.body;
+  if (!nombre) return res.status(400).json({ success: false, message: "Falta el nombre" });
+  try {
+    const categoria = await prisma.categoria.create({ data: { nombre } });
+    res.json({ success: true, categoria });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error al crear categoría" });
+  }
 });
 
 module.exports = app;

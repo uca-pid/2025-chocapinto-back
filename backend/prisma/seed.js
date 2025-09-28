@@ -2,6 +2,22 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
+  // Insertar categorías por defecto
+  const categorias = [
+    "Ficción",
+    "No Ficción",
+    "Ciencia Ficción",
+    "Fantasía",
+    "Ensayo"
+  ];
+  for (const nombre of categorias) {
+    await prisma.categoria.upsert({
+      where: { nombre },
+      update: {},
+      create: { nombre }
+    });
+  }
+
   await prisma.book.createMany({
     data: [
       { title: "Cien años de soledad", author: "Gabriel García Márquez" },
