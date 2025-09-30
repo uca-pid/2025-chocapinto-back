@@ -15,6 +15,7 @@ model User {
   role     String
   solicitudes ClubSolicitud[]
   clubs    Club[] @relation("ClubMembers")
+  comments  Comment[]
 }
 
 model ClubSolicitud {
@@ -32,19 +33,12 @@ model Club {
   name        String
   description String
   id_owner    Int
+  imagen      String?
   solicitudes ClubSolicitud[]
   members     User[] @relation("ClubMembers")
   readBooks       Book[] @relation("ClubBooks")//desp lo borramos y poenmos clubsBooks ClubBook[]
-  
+  comments  Comment[]
 }
-// model ClubBook {
-//   id        Int    @id @default(autoincrement())
-//   club      Club   @relation(fields: [clubId], references: [id])
-//   clubId    Int
-//   book      Book   @relation(fields: [bookId], references: [id])
-//   bookId    Int
-//   estado    String // "leido", "por_leer", "leyendo"
-// }
 
 model Book {
   id        Int      @id @default(autoincrement())
@@ -55,10 +49,23 @@ model Book {
   categorias  Categoria[] @relation("BookCategorias")
   // back relation (no join model defined — Prisma creates it implicitly)
   clubs     Club[]   @relation("ClubBooks")//desp lo borramos y poenmos clubsBooks ClubBook[]
-
+  comments  Comment[]
 }
+
 model Categoria {
   id     Int     @id @default(autoincrement())
   nombre String  @unique
   libros Book[]  @relation("BookCategorias")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  book      Book     @relation(fields: [bookId], references: [id])
+  bookId    Int
+  club      Club     @relation(fields: [clubId], references: [id])
+  clubId    Int
 }

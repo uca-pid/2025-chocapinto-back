@@ -112,9 +112,8 @@ app.post("/deleteUser", async (req, res) => {
 
 // Crear Club
 app.post("/createClub", async (req, res) => {
-    console.log("Body recibido:", req.body); 
   try {
-    const { name, description, ownerUsername } = req.body;
+    const { name, description, ownerUsername, imagen } = req.body;
 
     if (!name || !description || !ownerUsername) {
       return res.status(400).json({ success: false, message: "Faltan datos" });
@@ -122,20 +121,22 @@ app.post("/createClub", async (req, res) => {
 
     const owner = await prisma.user.findUnique({ where: { username: ownerUsername } });
     if (!owner) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
-    console.log("Owner encontrado:", owner);
-    // Crear club
+
+    // Imagen por defecto si no mandan una
+    const defaultImg = "https://img.lovepik.com/png/20231109/book-cartoon-illustration-school-start-reading-reading-book_539915_wh860.png";
+
     const club = await prisma.club.create({
       data: {
         name,
         description,
         id_owner: owner.id,
+        imagen: imagen || defaultImg,
         members: {
-          connect: { id: owner.id } // el creador se agrega como miembro
+          connect: { id: owner.id }
         }
       },
-      include: { members: true } // opcional, para devolver los miembros
+      include: { members: true }
     });
-
 
     res.json({ success: true, club });
   } catch (error) {
@@ -213,21 +214,17 @@ app.get("/club/:id", async (req, res) => {
         members: true
       }
     });
-    // console.log("GET /club/:id", { clubId, club });
     if (!club) return res.status(404).json({ success: false, message: "Club no encontrado" });
-    // Si no hay solicitudes, devolver array vacío
     const solicitudes = club.solicitudes ? club.solicitudes.map(s => ({
       id: s.id,
       username: s.user.username,
       estado: s.estado,
       createdAt: s.createdAt
     })) : [];
-    // Buscar nombre del owner
     let ownerName = null;
     if (club.owner) {
       ownerName = club.owner.username;
     } else {
-      // Si no existe la relación, buscar manualmente
       const ownerUser = await prisma.user.findUnique({ where: { id: club.id_owner } });
       ownerName = ownerUser ? ownerUser.username : null;
     }
@@ -239,6 +236,7 @@ app.get("/club/:id", async (req, res) => {
         description: club.description,
         id_owner: club.id_owner,
         ownerName,
+        imagen: club.imagen, // <-- Agregado aquí
         readBooks: club.readBooks.map(book => ({
           id: book.id,
           title: book.title,
@@ -252,8 +250,6 @@ app.get("/club/:id", async (req, res) => {
       },
     });
     console.log("Club encontrado:", club);
-  
-
   } catch (error) {
     res.status(500).json({ success: false, message: "Error al buscar club" });
   }
@@ -457,6 +453,138 @@ app.post("/categorias", async (req, res) => {
     res.json({ success: true, categoria });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error al crear categoría" });
+  }
+});
+// Editar categoría
+app.put("/categorias/:id", async (req, res) => {
+  const categoriaId = Number(req.params.id);
+  const { nombre } = req.body;
+
+  if (!categoriaId || !nombre) {
+    return res.status(400).json({ success: false, message: "Faltan datos" });
+  }
+
+  try {
+    const categoria = await prisma.categoria.findUnique({ where: { id: categoriaId } });
+    if (!categoria) {
+      return res.status(404).json({ success: false, message: "Categoría no encontrada" });
+    }
+
+    // Bloquear edición de estáticas
+    if (categoriasEstaticas.includes(categoria.nombre)) {
+      return res.status(403).json({ success: false, message: "No se puede editar esta categoría predeterminada" });
+    }
+
+    const updated = await prisma.categoria.update({
+      where: { id: categoriaId },
+      data: { nombre }
+    });
+    res.json({ success: true, categoria: updated });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error al editar categoría" });
+  }
+});
+
+// Eliminar categoría
+app.delete("/categorias/:id", async (req, res) => {
+  const categoriaId = Number(req.params.id);
+  if (!categoriaId) {
+    return res.status(400).json({ success: false, message: "ID inválido" });
+  }
+
+  try {
+    const categoria = await prisma.categoria.findUnique({ where: { id: categoriaId } });
+    if (!categoria) {
+      return res.status(404).json({ success: false, message: "Categoría no encontrada" });
+    }
+
+    // Bloquear eliminación de estáticas
+    if (categoriasEstaticas.includes(categoria.nombre)) {
+      return res.status(403).json({ success: false, message: "No se puede eliminar esta categoría predeterminada" });
+    }
+
+    await prisma.categoria.delete({ where: { id: categoriaId } });
+    res.json({ success: true, message: "Categoría eliminada" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error al eliminar categoría" });
+  }
+});
+
+
+
+app.post("/comentario", async (req, res) => {
+  let { userId, bookId, clubId, content } = req.body;
+
+  console.log("Datos recibidos:", req.body); // Depuración
+
+  // Convertir a número porque vienen como string del frontend
+  userId = Number(userId);
+  bookId = Number(bookId);
+  clubId = Number(clubId);
+
+  if (!userId || !bookId || !clubId || !content) {
+    return res.status(400).json({ success: false, message: "Faltan datos" });
+  }
+  try {
+    // Verificar existencia de usuario, libro y club antes de crear el comentario
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const book = await prisma.book.findUnique({ where: { id: bookId } });
+    const club = await prisma.club.findUnique({ where: { id: clubId } });
+
+    console.log("Usuario encontrado:", user); // Depuración
+    console.log("Libro encontrado:", book); // Depuración
+    console.log("Club encontrado:", club); // Depuración
+
+    if (!user || !book || !club) {
+      return res.status(404).json({ success: false, message: "Usuario, libro o club no encontrado" });
+    }
+
+    const comentario = await prisma.comment.create({
+      data: {
+        content: content,
+        user: { connect: { id: userId } },
+        book: { connect: { id: bookId } },
+        club: { connect: { id: clubId } }
+      }
+    });
+
+    res.json({ success: true, comentario });
+  } catch (error) {
+    console.error("Error al crear comentario:", error); // Depuración
+    res.status(500).json({ success: false, message: "Error al crear comentario", error: error.message });
+  }
+});
+app.delete("/comentario/:id", async (req, res) => {
+  const comentarioId = Number(req.params.id);
+  if (!comentarioId) {
+    return res.status(400).json({ success: false, message: "ID de comentario inválido" });
+  }
+  try {
+    const comentario = await prisma.comment.findUnique({ where: { id: comentarioId } });
+    if (!comentario) {
+      return res.status(404).json({ success: false, message: "Comentario no encontrado" });
+    }
+    await prisma.comment.delete({ where: { id: comentarioId } });
+    res.json({ success: true, message: "Comentario eliminado" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error al eliminar comentario" });
+  }
+});
+
+app.get("/comentario/book/:bookId/club/:clubId", async (req, res) => {
+  const bookId = Number(req.params.bookId);
+  const clubId = Number(req.params.clubId);
+  if (!bookId || !clubId) {
+    return res.status(400).json({ success: false, message: "ID de libro o club inválido" });
+  }
+  try {
+    const comentarios = await prisma.comment.findMany({
+      where: { bookId, clubId },
+      include: { user: { select: { username: true } } }
+    });
+    res.json({ success: true, comentarios });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error al obtener comentarios" });
   }
 });
 
