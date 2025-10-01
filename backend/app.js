@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const prisma = require("./db"); 
+const bcrypt = require("bcryptjs"); 
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.get("/user/:idOrUsername", async (req, res) => {
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 });
+/** 
 // Registro
 app.post("/register", async (req, res) => {
   const { username, email, password } = req.body;
@@ -43,8 +45,42 @@ app.post("/register", async (req, res) => {
       res.status(500).json({ success: false, message: "Error del servidor", error: error.message });
     }
   }
-});
+});*/
+app.post("/register", async (req, res) => {
+  const { username, email, password } = req.body;
 
+  if (!username || !email || !password) {
+    return res.status(400).json({ success: false, message: "Faltan datos" });
+  }
+
+  try {
+    // 1. Generar un salt (semilla aleatoria)
+    const salt = await bcrypt.genSalt(10);
+    
+    // 2. Hashear la contraseña usando el salt
+    const hashedPassword = await bcrypt.hash(password, salt); // << PASO CRÍTICO
+
+    // 3. Guardar el usuario con la contraseña HASHEADA
+    const user = await prisma.user.create({
+      data: { 
+        username, 
+        email, 
+        password: hashedPassword, // << AHORA SE GUARDA EL HASH SEGURO
+        role: "reader" 
+      }
+    });
+
+    res.status(201).json({ success: true, message: "Usuario registrado con éxito", user });
+  } catch (error) {
+    if (error.code === "P2002") {
+      res.status(400).json({ success: false, message: "El usuario ya existe" });
+    } else {
+      console.error("Error al registrar:", error);
+      res.status(500).json({ success: false, message: "Error del servidor", error: error.message });
+    }
+  }
+});
+/*
 // Login
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
@@ -55,8 +91,38 @@ app.post("/login", async (req, res) => {
   }
 
   res.json({ success: true, message: "Login exitoso", role: user.role, id: user.id });
-});
+});*/
 
+// app.js (CÓDIGO CORREGIDO para el Login)
+
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const user = await prisma.user.findUnique({ where: { username } });
+
+    // 1. Verificar si el usuario existe
+    if (!user) {
+      // Usar un mensaje genérico por seguridad
+      return res.status(401).json({ success: false, message: "Credenciales inválidas" });
+    }
+
+    // 2. 🔑 COMPARACIÓN CORRECTA DE HASH: 
+    // Compara el texto plano (password) con el hash guardado (user.password)
+    const isPasswordValid = await bcrypt.compare(password, user.password); // <-- ESTO ES LO CRÍTICO
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ success: false, message: "Credenciales inválidas" });
+    }
+
+    // 3. Login exitoso
+    res.json({ success: true, message: "Login exitoso", role: user.role, id: user.id });
+
+  } catch (error) {
+    console.error("Error en login:", error);
+    res.status(500).json({ success: false, message: "Error interno del servidor" });
+  }
+});
 // Actualizar usuario
 app.put("/updateUser", async (req, res) => {
   try {
@@ -598,6 +664,52 @@ app.get("/comentario/book/:bookId/club/:clubId", async (req, res) => {
     res.status(500).json({ success: false, message: "Error al obtener comentarios" });
   }
 });
+
+// app.js (Bloque de código a AÑADIR)
+// =======================================================
+// NUEVO ENDPOINT PARA CAMBIAR CONTRASEÑA
+// =======================================================
+app.post("/changePassword", async (req, res) => {
+    const { currentUsername, currentPassword, newPassword } = req.body;
+
+    if (!currentUsername || !currentPassword || !newPassword) {
+        return res.status(400).json({ success: false, message: "Faltan la contraseña actual o la nueva contraseña." });
+    }
+
+    try {
+        // 1. Buscar el usuario
+        const user = await prisma.user.findUnique({ where: { username: currentUsername } });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Usuario no encontrado." });
+        }
+
+        // 2. Verificar la contraseña actual (CRÍTICO: usa bcrypt.compare)
+        const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        
+        if (!isPasswordValid) {
+            return res.status(401).json({ success: false, message: "Contraseña actual incorrecta." });
+        }
+
+        // 3. Hashear la nueva contraseña
+        const salt = await bcrypt.genSalt(10);
+        const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+
+        // 4. Actualizar la contraseña en la base de datos
+        await prisma.user.update({
+            where: { username: currentUsername },
+            data: { password: hashedNewPassword }
+        });
+
+        res.json({ success: true, message: "Contraseña actualizada con éxito." });
+
+    } catch (error) {
+        console.error("Error al cambiar contraseña:", error);
+        res.status(500).json({ success: false, message: "Error interno del servidor al procesar el cambio de contraseña." });
+    }
+});
+
+module.exports = app;
 
 module.exports = app;
 
