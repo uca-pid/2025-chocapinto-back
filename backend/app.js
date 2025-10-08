@@ -7,8 +7,8 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-
 // Obtener datos de usuario por username
+//pasado a controlador USER
 app.get("/user/:idOrUsername", async (req, res) => {
   const idOrUsername = req.params.idOrUsername;
   let user = null;
@@ -24,28 +24,9 @@ app.get("/user/:idOrUsername", async (req, res) => {
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 });
-/** 
+
 // Registro
-app.post("/register", async (req, res) => {
-  const { username, email, password } = req.body;
-
-  if (!username || !email || !password) {
-    return res.status(400).json({ success: false, message: "Faltan datos" });
-  }
-
-  try {
-    const user = await prisma.user.create({
-      data: { username, email, password, role: "reader" }
-    });
-    res.status(201).json({ success: true, message: "Usuario registrado con éxito", user });
-  } catch (error) {
-    if (error.code === "P2002") {
-      res.status(400).json({ success: false, message: "El usuario ya existe" });
-    } else {
-      res.status(500).json({ success: false, message: "Error del servidor", error: error.message });
-    }
-  }
-});*/
+// pasado a controlador AUTH
 app.post("/register", async (req, res) => {
   const { username, email, password } = req.body;
 
@@ -80,21 +61,9 @@ app.post("/register", async (req, res) => {
     }
   }
 });
-/*
-// Login
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const user = await prisma.user.findUnique({ where: { username } });
-
-  if (!user || user.password !== password) {
-    return res.status(401).json({ success: false, message: "Credenciales inválidas" });
-  }
-
-  res.json({ success: true, message: "Login exitoso", role: user.role, id: user.id });
-});*/
 
 // app.js (CÓDIGO CORREGIDO para el Login)
-
+// // pasado a controlador AUTH
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -123,7 +92,9 @@ app.post("/login", async (req, res) => {
     res.status(500).json({ success: false, message: "Error interno del servidor" });
   }
 });
+
 // Actualizar usuario
+// pasado a controlador USER
 app.put("/updateUser", async (req, res) => {
   try {
     const { currentUsername, newUsername, newPassword } = req.body;
@@ -156,8 +127,10 @@ app.put("/updateUser", async (req, res) => {
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 });
+
 // Eliminar usuario
 // Cambiar DELETE a POST
+// pasado a controlador USER
 app.post("/deleteUser", async (req, res) => {
   const { username } = req.body;
   if (!username) {
@@ -177,6 +150,7 @@ app.post("/deleteUser", async (req, res) => {
 });
 
 // Crear Club
+// pasado a controlador CLUB
 app.post("/createClub", async (req, res) => {
   try {
     const { name, description, ownerUsername, imagen } = req.body;
@@ -210,6 +184,7 @@ app.post("/createClub", async (req, res) => {
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 });
+// pasado a controlador CLUB
 app.delete("/deleteClub/:id", async (req, res) => {
   const clubId = Number(req.params.id);
   if (!clubId) return res.status(400).json({ success: false, message: "ID inválido" });
@@ -222,6 +197,7 @@ app.delete("/deleteClub/:id", async (req, res) => {
 });
 
 // Obtener todos los clubes con info de miembros
+// pasado a controlador CLUB
 app.get("/clubs", async (req, res) => {
   try {
     const clubs = await prisma.club.findMany({
@@ -235,6 +211,7 @@ app.get("/clubs", async (req, res) => {
 });
 // Unirse a un club
 // Crear solicitud de ingreso a club
+// pasado a controlador CLUB
 app.post("/clubSolicitud", async (req, res) => {
   try {
     const { clubId, username } = req.body;
@@ -275,6 +252,7 @@ app.post("/clubSolicitud", async (req, res) => {
   }
 });
 // Obtener club por id
+// pasado a controlador CLUB
 app.get("/club/:id", async (req, res) => {
   const clubId = Number(req.params.id);
   if (!clubId) return res.status(400).json({ success: false, message: "ID inválido" });
@@ -344,7 +322,7 @@ app.get("/club/:id", async (req, res) => {
   }
 });
 
-
+//pasado a controlador BOOK
 app.post("/club/:id/addBook", async (req, res) => {
   const clubId = Number(req.params.id);
   const { title, author, id_api, thumbnail, categorias, username, estado = "por_leer" } = req.body;
@@ -436,6 +414,7 @@ app.post("/club/:id/addBook", async (req, res) => {
 
 // Eliminar libro leído del club (solo owner)
 // Aceptar o rechazar solicitud de ingreso a club
+// pasado a controlador CLUB
 app.put("/club/:clubId/solicitud/:solicitudId", async (req, res) => {
   const clubId = Number(req.params.clubId);
   const solicitudId = Number(req.params.solicitudId);
@@ -474,6 +453,8 @@ app.put("/club/:clubId/solicitud/:solicitudId", async (req, res) => {
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 });
+
+//pasado a controlador BOOK
 app.delete("/club/:id/deleteBook/:bookId", async (req, res) => {
   const clubId = Number(req.params.id);
   const bookId = Number(req.params.bookId);
@@ -535,7 +516,7 @@ app.delete("/club/:id/deleteBook/:bookId", async (req, res) => {
     res.status(500).json({ success: false, message: "Error al eliminar libro" });
   }
 });
-// Obtener todos los libros
+// Obtener todos los libros BOOK
 app.get("/books", async (req, res) => {
   try {
     const books = await prisma.book.findMany();
@@ -550,6 +531,7 @@ app.get("/books", async (req, res) => {
 
 const GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1/volumes";
 
+//PASADO A CONTROLADOR BOOK
 app.get("/books/search", async (req, res) => {
   const { query } = req.query;
   if (!query) {
@@ -568,6 +550,7 @@ app.get("/books/search", async (req, res) => {
     res.status(500).json({ success: false, message: "Error al buscar libros en Google Books" });
   }
 });
+// pasado a controlador CLUB
 app.delete("/club/:clubId/removeMember/:userId", async (req, res) => {
     const clubId = Number(req.params.clubId);
     const userId = Number(req.params.userId);
@@ -586,7 +569,7 @@ app.delete("/club/:clubId/removeMember/:userId", async (req, res) => {
         res.status(500).json({ success: false, message: "Error al eliminar usuario" });
     }
 });
-// Listar todas las categorías
+// Listar todas las categorías pasado
 const categoriasEstaticas = [
   "Ficción",
   "No Ficción",
@@ -594,7 +577,7 @@ const categoriasEstaticas = [
   "Fantasía",
   "Ensayo"
 ];
-
+//pasado a controlador CATEGORIA
 app.get("/categorias", async (req, res) => {
   try {
     // Insertar las categorías por defecto si no existen
@@ -612,7 +595,7 @@ app.get("/categorias", async (req, res) => {
   }
 });
 
-// Crear nueva categoría
+// Crear nueva categoría CATEGORIA
 app.post("/categorias", async (req, res) => {
   const { nombre } = req.body;
   if (!nombre) return res.status(400).json({ success: false, message: "Falta el nombre" });
@@ -623,7 +606,7 @@ app.post("/categorias", async (req, res) => {
     res.status(500).json({ success: false, message: "Error al crear categoría" });
   }
 });
-// Editar categoría
+// Editar categoría CATEGORIA
 app.put("/categorias/:id", async (req, res) => {
   const categoriaId = Number(req.params.id);
   const { nombre } = req.body;
@@ -653,17 +636,8 @@ app.put("/categorias/:id", async (req, res) => {
   }
 });
 
-//funcion que borra todos los comentarios
-app.delete("/comentarios", async (req, res) => {
-  try {
-    await prisma.comment.deleteMany({});
-    res.json({ success: true, message: "Todos los comentarios han sido eliminados" });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Error al eliminar comentarios" });
-  }
-});
-
 // Eliminar categoría
+//pasado a controlador CATEGORIA
 app.delete("/categorias/:id", async (req, res) => {
   const categoriaId = Number(req.params.id);
   if (!categoriaId) {
@@ -689,7 +663,7 @@ app.delete("/categorias/:id", async (req, res) => {
 });
 
 
-
+//pasado a controlador COMMENT
 app.post("/comentario", async (req, res) => {
   let { userId, bookId, clubId, content } = req.body;
 
@@ -741,6 +715,8 @@ app.post("/comentario", async (req, res) => {
     res.status(500).json({ success: false, message: "Error al crear comentario", error: error.message });
   }
 });
+
+//pasado a controlador COMMENT
 app.delete("/comentario/:id", async (req, res) => {
   const comentarioId = Number(req.params.id);
   if (!comentarioId) {
@@ -758,6 +734,7 @@ app.delete("/comentario/:id", async (req, res) => {
   }
 });
 
+//pasado a controlador COMMET
 app.get("/comentario/book/:bookId/club/:clubId", async (req, res) => {
   const bookId = Number(req.params.bookId);
   const clubId = Number(req.params.clubId);
@@ -794,6 +771,8 @@ app.get("/comentario/book/:bookId/club/:clubId", async (req, res) => {
 // =======================================================
 // NUEVO ENDPOINT PARA CAMBIAR CONTRASEÑA
 // =======================================================
+// pasado a controlador AUTH
+
 app.post("/changePassword", async (req, res) => {
     const { currentUsername, currentPassword, newPassword } = req.body;
 
@@ -835,6 +814,7 @@ app.post("/changePassword", async (req, res) => {
 });
 
 // Cambiar estado de un libro en un club
+//pasado a controlador BOOK
 app.put("/club/:clubId/book/:bookId/estado", async (req, res) => {
   const clubId = Number(req.params.clubId);
   const bookId = Number(req.params.bookId);
@@ -971,6 +951,7 @@ app.put("/club/:clubId/book/:bookId/estado", async (req, res) => {
 // ==================== RUTAS DEL HISTORIAL ====================
 
 // Obtener historial de un club
+//pasado a controlador HISTORY
 app.get("/club/:clubId/reading-history", async (req, res) => {
   try {
     const clubId = Number(req.params.clubId);
@@ -1020,7 +1001,8 @@ app.get("/club/:clubId/reading-history", async (req, res) => {
   }
 });
 
-// Obtener estadísticas de lectura del club
+//pasado a controlador
+// Obtener estadísticas de lectura del club HISTORY
 app.get("/club/:clubId/reading-stats", async (req, res) => {
   try {
     const clubId = Number(req.params.clubId);
@@ -1126,5 +1108,5 @@ app.get("/club/:clubId/reading-stats", async (req, res) => {
   }
 });
 
-module.exports = app;
+// module.exports = app;
 
