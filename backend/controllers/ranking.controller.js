@@ -14,7 +14,13 @@ const getUsersRanking = async (req, res) => {
     // Verificar que el club existe
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      include: { members: true }
+      include: { 
+        memberships: {
+          include: {
+            user: true
+          }
+        }
+      }
     });
 
     if (!club) {
@@ -23,7 +29,8 @@ const getUsersRanking = async (req, res) => {
 
     // Obtener estadísticas de usuarios activos en el club
     const usersStats = await Promise.all(
-      club.members.map(async (user) => {
+      club.memberships.map(async (membership) => {
+        const user = membership.user;
         // Contar comentarios del usuario en libros de este club
         const commentsCount = await prisma.comment.count({
           where: {

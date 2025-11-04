@@ -7,6 +7,11 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+enum ClubRole {
+  OWNER     // Propietario/Fundador
+  MODERADOR 
+  LECTOR    
+}
 model User {
   id              Int               @id @default(autoincrement())
   username        String            @unique
@@ -14,7 +19,8 @@ model User {
   password        String
   role            String
   solicitudes     ClubSolicitud[]
-  clubs           Club[]            @relation("ClubMembers")
+  // clubs           Club[]            @relation("ClubMembers")
+  memberships    ClubMember[]
   comments        Comment[]
   clubBooks       ClubBook[]        @relation("LibrosSubidos") // ← relación inversa a ClubBook.addedBy
   readingHistory  ReadingHistory[]
@@ -34,12 +40,14 @@ model Club {
   id              Int               @id @default(autoincrement())
   name            String
   description     String
-  id_owner        Int
+  id_owner        Int               // Propietario del club
   imagen          String?
   solicitudes     ClubSolicitud[]
-  members         User[]            @relation("ClubMembers")
+  // members         User[]            @relation("ClubMembers")
+  memberships    ClubMember[]
   clubBooks       ClubBook[]
   readingHistory  ReadingHistory[]
+  clubCategories ClubCategoria[] @relation("ClubToClubCategoria")
 }
 
 model Book {
@@ -99,4 +107,28 @@ model ReadingHistory {
   club         Club     @relation(fields: [clubId], references: [id])
   
   @@map("reading_history")
+}
+
+model ClubMember {
+  id       Int      @id @default(autoincrement())
+  user     User     @relation(fields: [userId], references: [id])
+  userId   Int
+  club     Club     @relation(fields: [clubId], references: [id])
+  clubId   Int
+  
+  // Aquí se guarda el ROL del usuario EN ESTE club
+  role     ClubRole @default(LECTOR) 
+  
+  joinedAt DateTime @default(now())
+
+  @@unique([userId, clubId]) // Un usuario solo puede estar una vez en un club
+  @@map("club_members")
+}
+
+model ClubCategoria {
+  id     Int    @id @default(autoincrement())
+  nombre String @unique
+  clubs  Club[] @relation("ClubToClubCategoria") // Clubes que tienen esta categoría
+
+  @@map("club_categorias")
 }

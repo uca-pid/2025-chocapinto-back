@@ -30,10 +30,16 @@ const addBookToClub = async (req, res) => {
     // Verificar que es miembro del club
     const club = await prisma.club.findUnique({
       where: { id: Number(clubId) },
-      include: { members: true }
+      include: { 
+        memberships: {
+          include: {
+            user: true
+          }
+        }
+      }
     });
 
-    const isMember = club.members.some(member => member.id === user.id) || club.id_owner === user.id;
+    const isMember = club.memberships.some(membership => membership.user.id === user.id) || club.id_owner === user.id;
     if (!isMember) {
       return res.status(403).json({ success: false, message: "No eres miembro de este club" });
     }
@@ -196,14 +202,20 @@ const removeBookFromClub = async (req, res) => {
     // Verificar que el club existe y los permisos
     const club = await prisma.club.findUnique({
       where: { id: Number(clubId) },
-      include: { members: true }
+      include: { 
+        memberships: {
+          include: {
+            user: true
+          }
+        }
+      }
     });
 
     if (!club) {
       return res.status(404).json({ success: false, message: "Club no encontrado" });
     }
 
-    const isMember = club.members.some(member => member.id === user.id) || club.id_owner === user.id;
+    const isMember = club.memberships.some(membership => membership.user.id === user.id) || club.id_owner === user.id;
     if (!isMember) {
       return res.status(403).json({ success: false, message: "No tienes permisos para eliminar libros de este club" });
     }
@@ -309,10 +321,16 @@ const changeBookStatus = async (req, res) => {
     // Verificar permisos
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      include: { members: true }
+      include: { 
+        memberships: {
+          include: {
+            user: true
+          }
+        }
+      }
     });
 
-    const isMember = club.members.some(member => member.id === user.id) || club.id_owner === user.id;
+    const isMember = club.memberships.some(membership => membership.user.id === user.id) || club.id_owner === user.id;
     if (!isMember) {
       return res.status(403).json({ success: false, message: "No eres miembro de este club" });
     }
