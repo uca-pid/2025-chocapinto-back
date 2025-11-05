@@ -13,6 +13,9 @@ const obtenerEstadoActual = async (req, res) => {
 
         console.log(`🔍 Consultando estado actual del club ${clubId}`);
 
+        // ⏰ VERIFICACIÓN AUTOMÁTICA DE VENCIMIENTOS
+        await verificarYCerrarVencimientos(clubId);
+
         // 1. Buscar período en VOTACION
         let periodoActivo = await prisma.periodoLectura.findFirst({
             where: {
@@ -808,6 +811,180 @@ const debugLibrosClub = async (req, res) => {
             success: false,
             error: error.message
         });
+    }
+};
+
+// ========== FUNCIÓN AUXILIAR: VERIFICAR VENCIMIENTOS ==========
+
+/**
+ * Verifica y cierra automáticamente períodos vencidos
+ * @param {number} clubId - ID del club
+ */
+const verificarYCerrarVencimientos = async (clubId) => {
+    try {
+        const ahora = new Date();
+        console.log(`⏰ Verificando vencimientos para club ${clubId} - ${ahora.toISOString()}`);
+
+        // 1. Verificar votaciones vencidas
+        const votacionesVencidas = await prisma.periodoLectura.findMany({
+            where: {
+                clubId: clubId,
+                estado: 'VOTACION',
+                fechaFinVotacion: {
+                    lt: ahora // menor que la fecha actual
+                }
+            },
+            include: {
+                opciones: {
+                    include: {
+                        clubBook: {
+                            include: {
+                                book: true
+                            }
+                        },
+                        votos: {
+                            include: {
+                                user: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Cerrar votaciones vencidas automáticamente
+        for (const votacion of votacionesVencidas) {
+            console.log(`🗳️ AUTO-CERRANDO votación vencida: ${votacion.nombre}`);
+            await cerrarVotacionAutomatica(votacion);
+        }
+
+        // 2. Verificar lecturas vencidas
+        const lecturasVencidas = await prisma.periodoLectura.findMany({
+            where: {
+                clubId: clubId,
+                estado: 'LEYENDO',
+                fechaFinLectura: {
+                    lt: ahora // menor que la fecha actual
+                }
+            },
+            include: {
+                libroGanador: {
+                    include: {
+                        book: true
+                    }
+                }
+            }
+        });
+
+        // Concluir lecturas vencidas automáticamente
+        for (const lectura of lecturasVencidas) {
+            console.log(`📚 AUTO-CONCLUYENDO lectura vencida: ${lectura.nombre}`);
+            await concluirLecturaAutomatica(lectura);
+        }
+
+        if (votacionesVencidas.length === 0 && lecturasVencidas.length === 0) {
+            console.log(`✅ No hay períodos vencidos para club ${clubId}`);
+        }
+
+    } catch (error) {
+        console.error('❌ Error al verificar vencimientos:', error);
+    }
+};
+
+/**
+ * Cierra una votación automáticamente (lógica similar a cerrarVotacion pero sin req/res)
+ */
+const cerrarVotacionAutomatica = async (periodo) => {
+    try {
+        console.log(`🤖 CERRANDO AUTOMÁTICAMENTE votación: ${periodo.nombre}`);
+
+        // Contar votos por opción
+        const resultados = periodo.opciones.map(opcion => ({
+            opcion,
+            votos: opcion.votos.length
+        })).sort((a, b) => b.votos - a.votos);
+
+        if (resultados.length === 0 || resultados[0].votos === 0) {
+            // Sin votos - marcar como cerrado sin ganador
+            await prisma.periodoLectura.update({
+                where: { id: periodo.id },
+                data: {
+                    estado: 'CERRADO',
+                    updatedAt: new Date()
+                }
+            });
+            console.log(`⚠️ Votación cerrada automáticamente SIN VOTOS: ${periodo.nombre}`);
+            return;
+        }
+
+        // Determinar ganador
+        const ganador = resultados[0];
+        const esEmpate = resultados.length > 1 && resultados[1].votos === ganador.votos;
+
+        if (esEmpate) {
+            // En caso de empate, tomar el primero (o implementar lógica de desempate)
+            console.log(`⚖️ EMPATE detectado, tomando primera opción: ${ganador.opcion.clubBook.book.title}`);
+        }
+
+        // Actualizar el período con el libro ganador
+        await prisma.periodoLectura.update({
+            where: { id: periodo.id },
+            data: {
+                estado: 'LEYENDO',
+                libroGanadorId: ganador.opcion.clubBookId,
+                updatedAt: new Date()
+            }
+        });
+
+        // Actualizar estado del libro ganador a "leyendo" para todos los miembros
+        await prisma.clubBook.updateMany({
+            where: {
+                id: ganador.opcion.clubBookId
+            },
+            data: {
+                estado: 'leyendo'
+            }
+        });
+
+        console.log(`✅ Votación cerrada automáticamente - Ganador: ${ganador.opcion.clubBook.book.title}`);
+
+    } catch (error) {
+        console.error('❌ Error al cerrar votación automáticamente:', error);
+    }
+};
+
+/**
+ * Concluye una lectura automáticamente (lógica similar a concluirLectura pero sin req/res)
+ */
+const concluirLecturaAutomatica = async (periodo) => {
+    try {
+        console.log(`🤖 CONCLUYENDO AUTOMÁTICAMENTE lectura: ${periodo.nombre}`);
+
+        // Actualizar el período a CERRADO
+        await prisma.periodoLectura.update({
+            where: { id: periodo.id },
+            data: {
+                estado: 'CERRADO',
+                updatedAt: new Date()
+            }
+        });
+
+        // Actualizar estado del libro a "leido" para todos los miembros del club
+        if (periodo.libroGanadorId) {
+            await prisma.clubBook.updateMany({
+                where: {
+                    id: periodo.libroGanadorId
+                },
+                data: {
+                    estado: 'leido'
+                }
+            });
+
+            console.log(`✅ Lectura concluida automáticamente - Libro: ${periodo.libroGanador?.book?.title}`);
+        }
+
+    } catch (error) {
+        console.error('❌ Error al concluir lectura automáticamente:', error);
     }
 };
 
