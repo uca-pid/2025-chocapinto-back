@@ -38,6 +38,25 @@ app.use('/', authRoutes);
 app.use('/', historyRoutes);
 app.use('/', rankingRoutes);
 
+// Mensaje en la raíz para indicar que la API está disponible
+app.get('/', (req, res) => {
+  if (req.accepts('html')) {
+    return res.send(`<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Chocapinto API</title>
+        </head>
+        <body style="font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;">
+          <h1>📚 API disponible</h1>
+          <p>La API está corriendo. Usa <code>/api/</code> para acceder a las rutas.</p>
+          <p>Puerto: ${process.env.PORT || 5000}</p>
+        </body>
+      </html>`);
+  }
+  res.json({ success: true, message: 'API disponible', base: '/api' });
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
