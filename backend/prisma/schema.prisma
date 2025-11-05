@@ -24,7 +24,6 @@ model User {
   comments        Comment[]
   clubBooks       ClubBook[]        @relation("LibrosSubidos") // ← relación inversa a ClubBook.addedBy
   readingHistory  ReadingHistory[]
-  votes           Vote[]
 }
 
 model ClubSolicitud {
@@ -49,7 +48,6 @@ model Club {
   clubBooks       ClubBook[]
   readingHistory  ReadingHistory[]
   clubCategories ClubCategoria[] @relation("ClubToClubCategoria")
-  voting Voting[]
 }
 
 model Book {
@@ -61,7 +59,6 @@ model Book {
   categorias      Categoria[]       @relation("BookCategorias")
   clubBooks       ClubBook[]
   readingHistory  ReadingHistory[]
-  votingOptions   VotingOption[]
 }
 
 model Categoria {
@@ -134,51 +131,4 @@ model ClubCategoria {
   clubs  Club[] @relation("ClubToClubCategoria") // Clubes que tienen esta categoría
 
   @@map("club_categorias")
-}
-
-enum VotingStatus {
-  OPEN
-  CLOSED
-}
-
-model Voting {
-  id        Int           @id @default(autoincrement())
-  club      Club          @relation(fields: [clubId], references: [id])
-  clubId    Int
-  status    VotingStatus  @default(OPEN)
-  createdAt DateTime      @default(now())
-  closedAt  DateTime?
-
-  options   VotingOption[]
-  votes     Vote[]
-
-  @@index([clubId, status])
-}
-
-model VotingOption {
-  id        Int     @id @default(autoincrement())
-  voting    Voting  @relation(fields: [votingId], references: [id])
-  votingId  Int
-  book      Book    @relation(fields: [bookId], references: [id])
-  bookId    Int
-  votes     Vote[]
-
-  @@unique([votingId, bookId])
-  @@index([votingId])
-}
-
-model Vote {
-  id           Int           @id @default(autoincrement())
-  voting       Voting        @relation(fields: [votingId], references: [id])
-  votingId     Int
-
-  option       VotingOption  @relation(fields: [optionId], references: [id])
-  optionId     Int           
-
-  user         User          @relation(fields: [userId], references: [id])
-  userId       Int
-
-  createdAt    DateTime      @default(now())
-
-  @@unique([votingId, userId]) // Un usuario solo puede votar una vez por votación
 }
