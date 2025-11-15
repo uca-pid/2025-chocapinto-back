@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const { computeNewXpAndLevel, XP_PER_BOOK_FINISHED } = require('../utils/xpSystem');
 
 // ========== ENDPOINT A: ESTADO ACTUAL DEL CLUB ==========
 
@@ -679,7 +680,23 @@ const concluirLectura = async (req, res) => {
                     where: { id: periodo.libroGanadorId },
                     data: { estado: 'leido' }
                 });
+
+                const miembros = await tx.clubMember.findMany({
+                    where: { clubId: periodo.clubId },
+                    include: { user: true }
+                });
+
+                for (const miembro of miembros) {
+                    const { xp, level } = computeNewXpAndLevel(miembro.user, XP_PER_BOOK_FINISHED);
+
+                    await tx.user.update({
+                        where: { id: miembro.userId },
+                        data: { xp, level }
+                    });
+                    console.log('XP actualizada - userId=${miembro.userId} xp=${xp} level=${level}');
+                }
             }
+            
 
             return periodoActualizado;
         });
