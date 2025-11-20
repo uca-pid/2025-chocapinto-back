@@ -457,10 +457,125 @@ const getAllBooks = async (req, res) => {
   }
 };
 
+const searchCursos = async (req, res) => {
+    try {
+        const { query } = req.query;
+        
+        console.log("=== SEARCH CURSOS ===");
+        console.log("Query recibida:", query);
+        
+        if (!query) {
+            return res.status(400).json({ success: false, message: "Query requerido" });
+        }
+
+        // 1. Petición a la API falsa (json-server)
+        // Primero intentamos obtener todos los cursos y filtrar localmente
+        let apiUrl = `http://localhost:3001/cursos`;
+        console.log("URL a consultar:", apiUrl);
+        
+        const response = await fetch(apiUrl);
+        console.log("Respuesta status:", response.status, response.statusText);
+
+        if (!response.ok) {
+            console.log("Error en response:", response.status, response.statusText);
+            throw new Error(`Error en la API de cursos: ${response.status} ${response.statusText}`);
+        }
+        
+        const todosCursos = await response.json();
+        console.log("Todos los cursos obtenidos:", todosCursos);
+        
+        // Filtrar localmente por coincidencias en el nombre
+        const cursosRaw = todosCursos.filter(curso => 
+            curso.nombre_curso.toLowerCase().includes(query.toLowerCase())
+        );
+        console.log("Cursos filtrados:", cursosRaw);        // 2. MAPEO: Disfrazar los cursos de libros
+        // Esto hace que tu frontend no se rompa
+        const cursosComoLibros = cursosRaw.map(curso => ({
+            title: curso.nombre_curso,        // Mapeamos nombre -> title
+            author: "señasApp",
+            portada: ""
+,            id_api: curso.id_externo,         // ID externo para guardarlo despues
+
+            descripcion: curso.descripcion || "Curso importado"
+        }));
+
+        console.log("Cursos transformados:", cursosComoLibros);
+
+        // 3. Devolvemos los datos ya "disfrazados"
+        res.json({ success: true, cursos: cursosComoLibros });
+
+    } catch (error) {
+        console.error("Error completo al buscar cursos:", error);
+        res.status(500).json({ success: false, message: "Error al buscar cursos: " + error.message, cursos: [] });
+    }
+};
+const agregarCursoComoLibro = async (req, res) => {
+    // 1. Obtener datos de la URL y del Body
+    const clubId = parseInt(req.params.id); // Viene de /club/:id/...
+    const { title, id_api, username } = req.body; 
+    
+    // Valores por defecto (Hardcodeados)
+    const AUTHOR_DEFAULT = "FinanzaApp";
+    const PORTADA_DEFAULT = "https://placehold.co/150"; // Imagen genérica
+
+    try {
+        // 2. Buscar al usuario que está agregando el curso
+        // Necesitamos su ID para el campo 'addedById'
+        const user = await prisma.user.findUnique({
+            where: { username: username }
+        });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+        }
+
+        // 3. Crear el Libro y Vincularlo al Club (Transacción)
+        // Usamos transaction para que si falla uno, no se cree nada.
+        const resultado = await prisma.$transaction(async (prisma) => {
+            
+            // A. Crear el "Libro" (que en realidad es el curso)
+            const nuevoLibro = await prisma.book.create({
+                data: {
+                    title: title,
+                    id_api: typeof id_api === 'string' ? parseInt(id_api) : id_api, // Asegurar que sea Int
+                    author: AUTHOR_DEFAULT, 
+                    portada: PORTADA_DEFAULT,
+                }
+            });
+
+            // B. Vincularlo al Club (Crear ClubBook)
+            const nuevoClubBook = await prisma.clubBook.create({
+                data: {
+                    clubId: clubId,
+                    bookId: nuevoLibro.id,
+                    addedById: user.id,
+                    estado: 'por_leer' // Estado inicial por defecto
+                }
+            });
+
+            return { libro: nuevoLibro, clubBook: nuevoClubBook };
+        });
+        
+        console.log(`✅ Curso agregado como libro: ${title}`);
+        
+        res.json({ 
+            success: true, 
+            message: "Curso agregado exitosamente", 
+            book: resultado.libro 
+        });
+
+    } catch (error) {
+        console.error("Error guardando curso:", error);
+        res.status(500).json({ success: false, error: "Error guardando curso en la base de datos" });
+    }
+};
+
 module.exports = {
   addBookToClub,
   removeBookFromClub,
   changeBookStatus,
   getAllBooks,
-  searchBooks
+  searchBooks,
+  searchCursos,
+  agregarCursoComoLibro
 };

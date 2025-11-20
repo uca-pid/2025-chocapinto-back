@@ -3,18 +3,27 @@ const express = require('express');
 const router = express.Router();
 const bookController = require('../controllers/book.controller');
 
-// Rutas de libros
-router.post('/addBook', bookController.addBookToClub); // Ruta legacy
-router.post('/club/:id/addBook', bookController.addBookToClub);
+// --- 1. RUTAS ESPECÍFICAS (SIEMPRE PRIMERO) ---
 
-// Rutas para eliminar libros - múltiples formatos
-router.post('/deleteBook', bookController.removeBookFromClub); // Ruta legacy
+// CORREGIDO: Quitamos '/books' porque ya viene del server.js
+router.get('/searchCursos', bookController.searchCursos); 
+router.get('/search', bookController.searchBooks);
+
+// --- 2. RUTAS GENERALES Y DINÁMICAS ---
+
+// Rutas de libros
+router.post('/addBook', bookController.addBookToClub); 
+router.post('/club/:id/addBook', bookController.addBookToClub);
+router.post('/club/:id/agregarCursoComoLibro', bookController.agregarCursoComoLibro);
+
+// Rutas para eliminar
+router.post('/deleteBook', bookController.removeBookFromClub); 
 router.delete('/club/:id/deleteBook', bookController.removeBookFromClub);
 router.delete('/club/:id/deleteBook/:bookId', bookController.removeBookFromClub);
 
 router.put('/club/:clubId/book/:bookId/estado', bookController.changeBookStatus);
-router.get('/books/search', bookController.searchBooks);
-router.get('/books', bookController.getAllBooks);
 
+// CORREGIDO: Esta ruta '/' equivale a '/api/books'
+router.get('/', bookController.getAllBooks); 
 
 module.exports = router;
