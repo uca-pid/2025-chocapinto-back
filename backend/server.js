@@ -11,14 +11,42 @@ const categoriaRoutes = require('./routes/categoria.routes');
 const authRoutes = require('./routes/auth.routes');
 const historyRoutes = require('./routes/history.routes');
 const rankingRoutes = require('./routes/ranking.routes');
+const apiBooksyRoutes = require('./routes/api_booksy.routes');
 
 const app = express();
 
 // Middlewares
-app.use(cors());
 app.use(express.json());
 
+// CORS específico para API Booksy (sistemas externos)
+app.use('/api/booksy', cors({
+  origin: function (origin, callback) {
+    // Permitir requests sin origen (como Postman, Thunder Client)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://booksy-platform.com',
+      'https://api.external-system.com',
+      'http://localhost:3000',
+      'http://localhost:5173'
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('No permitido por CORS para API externa'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
+}));
+
+// CORS general para el resto de rutas
+app.use(cors());
+
 // Usar rutas
+app.use('/api/booksy', apiBooksyRoutes); // API externa protegida
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/clubs', clubRoutes);

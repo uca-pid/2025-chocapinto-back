@@ -47,7 +47,24 @@ const addBookToClub = async (req, res) => {
 
     // Normalizar datos
     const cleanAuthor = author && author !== "null" && author.trim() !== "" ? author.trim() : null;
-    const cleanIdApi = id_api && id_api !== "null" && id_api !== "" ? id_api : null;
+    
+    // Convertir id_api a entero, validando que sea un número válido
+    let cleanIdApi = null;
+    if (id_api && id_api !== "null" && id_api !== "") {
+      const parsedId = parseInt(id_api, 10);
+      if (!isNaN(parsedId)) {
+        cleanIdApi = parsedId;
+      }
+    }
+    
+    console.log("🔍 Datos recibidos para libro:", {
+      title,
+      author: cleanAuthor,
+      id_api_original: id_api,
+      cleanIdApi: cleanIdApi,
+      cleanIdApi_type: typeof cleanIdApi,
+      portada: portada || thumbnail
+    });
     // La portada puede venir como 'portada' o 'thumbnail'
     const cleanPortada = (portada || thumbnail) && (portada || thumbnail) !== "null" && (portada || thumbnail).trim() !== "" 
       ? (portada || thumbnail).trim() 
@@ -57,8 +74,8 @@ const addBookToClub = async (req, res) => {
     let book = await prisma.book.findFirst({
       where: {
         OR: [
-          // Buscar por ID de API si existe
-          ...(cleanIdApi ? [{ id_api: cleanIdApi }] : []),
+          // Buscar por ID de API si existe (ya convertido a entero)
+          ...(cleanIdApi !== null && !isNaN(cleanIdApi) ? [{ id_api: cleanIdApi }] : []),
           // Buscar por título y autor
           { 
             AND: [
@@ -235,15 +252,45 @@ const removeBookFromClub = async (req, res) => {
         throw new Error("El libro no está en este club");
       }
 
-      // Eliminar comentarios relacionados con este ClubBook
+      console.log(`Eliminando libro ${bookId} del club ${clubId}, ClubBook ID: ${clubBook.id}`);
+
+      // 1. Eliminar opciones de votación relacionadas con este ClubBook
       try {
-        await tx.comment.deleteMany({
+        const deletedVotaciones = await tx.votacionOpcion.deleteMany({
           where: { 
             clubBookId: clubBook.id
           }
         });
+        console.log(`Eliminadas ${deletedVotaciones.count} opciones de votación`);
+      } catch (votacionError) {
+        console.log("Error al eliminar votaciones:", votacionError.message);
+      }
+
+      // 2. Actualizar períodos donde este libro era ganador
+      try {
+        const updatedPeriodos = await tx.periodoLectura.updateMany({
+          where: { 
+            libroGanadorId: clubBook.id
+          },
+          data: {
+            libroGanadorId: null
+          }
+        });
+        console.log(`Actualizados ${updatedPeriodos.count} períodos de lectura`);
+      } catch (periodoError) {
+        console.log("Error al actualizar períodos:", periodoError.message);
+      }
+
+      // 3. Eliminar comentarios relacionados con este ClubBook
+      try {
+        const deletedComments = await tx.comment.deleteMany({
+          where: { 
+            clubBookId: clubBook.id
+          }
+        });
+        console.log(`Eliminados ${deletedComments.count} comentarios`);
       } catch (commentError) {
-        console.log("No hay comentarios para eliminar o tabla comment no existe:", commentError.message);
+        console.log("Error al eliminar comentarios:", commentError.message);
         // Intentar con la tabla comentario si comment no existe
         try {
           await tx.comentario.deleteMany({
@@ -257,34 +304,79 @@ const removeBookFromClub = async (req, res) => {
         }
       }
 
-      // Eliminar el historial de lectura relacionado
+      // 4. Eliminar el historial de lectura relacionado
       try {
-        await tx.readingHistory.deleteMany({
+        const deletedHistory = await tx.readingHistory.deleteMany({
           where: {
             clubId: Number(clubId),
             bookId: Number(bookId)
           }
         });
+        console.log(`Eliminados ${deletedHistory.count} registros de historial`);
       } catch (historyError) {
-        console.log("No hay historial para eliminar:", historyError.message);
+        console.log("Error al eliminar historial:", historyError.message);
       }
 
-      // Eliminar de ClubBook
+      // 5. Eliminar de ClubBook
       await tx.clubBook.delete({
         where: { id: clubBook.id }
       });
+      console.log("ClubBook eliminado");
 
-      // Verificar si el libro está en otros clubes
+      // 6. Verificar si el libro está en otros clubes
       const otherClubBooks = await tx.clubBook.findFirst({
         where: { bookId: Number(bookId) }
       });
 
       // Si no está en ningún club, eliminarlo completamente
       if (!otherClubBooks) {
-        await tx.book.delete({
-          where: { id: Number(bookId) }
+        console.log(`Intentando eliminar libro completamente con id: ${bookId}`);
+        
+        // Verificar qué datos tiene el libro antes de eliminarlo
+        const bookToDelete = await tx.book.findUnique({
+          where: { id: Number(bookId) },
+          include: {
+            categorias: true,
+            readingHistory: true,
+            clubBooks: true
+          }
         });
-        console.log("Libro eliminado completamente de la base de datos");
+        console.log("Datos del libro a eliminar:", bookToDelete);
+        
+        // Verificar que no haya relaciones pendientes
+        if (bookToDelete.readingHistory.length > 0) {
+          console.log("Eliminando historial residual...");
+          await tx.readingHistory.deleteMany({
+            where: { bookId: Number(bookId) }
+          });
+        }
+
+        if (bookToDelete.clubBooks.length > 0) {
+          console.log("Hay ClubBooks residuales, no eliminar el libro");
+          return;
+        }
+
+        try {
+          // Eliminar relaciones many-to-many con categorías si existen
+          await tx.book.update({
+            where: { id: Number(bookId) },
+            data: {
+              categorias: {
+                set: []
+              }
+            }
+          });
+          console.log("Categorías desvinculadas");
+          
+          // Ahora eliminar el libro
+          await tx.book.delete({
+            where: { id: Number(bookId) }
+          });
+          console.log("Libro eliminado completamente de la base de datos");
+        } catch (bookDeleteError) {
+          console.error("Error específico al eliminar libro:", bookDeleteError);
+          throw bookDeleteError;
+        }
       } else {
         console.log("Libro mantenido porque está en otros clubes");
       }
@@ -293,7 +385,13 @@ const removeBookFromClub = async (req, res) => {
     res.json({ success: true, message: "Libro eliminado del club" });
   } catch (error) {
     console.error("Error al eliminar libro:", error);
-    res.status(500).json({ success: false, message: "Error interno del servidor" });
+    console.error("Stack trace:", error.stack);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error interno del servidor",
+      error: error.message,
+      details: error.stack
+    });
   }
 };
 
