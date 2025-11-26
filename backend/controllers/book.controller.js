@@ -1,13 +1,13 @@
 // src/controllers/book.controller.js
 const prisma = require('../db');
 const { validateRequiredFields } = require('../utils/validateFields');
-const { computeNewXpAndLevel, XP_PER_BOOK_FINISHED } = require('../utils/xpSystem');
+const { computeNewXpAndLevel, XP_PER_BOOK_FINISHED } = require('../utils/XPSystem');
 
 const addBookToClub = async (req, res) => {
   try {
     const { title, author, portada, thumbnail, id_api, username, categorias } = req.body;
     
-    // El clubId puede venir del body o de los params de la URL
+    // El clubId puede venir del body o de los params de la URL.
     const clubId = req.body.clubId || req.params.id;
 
     console.log("Datos recibidos en addBookToClub:", req.body);
