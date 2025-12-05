@@ -1,6 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const { computeNewXpAndLevel, XP_PER_BOOK_FINISHED } = require('../utils/xpSystem');
+const { computeNewXpAndLevel, XP_PER_BOOK_FINISHED } = require('../utils/XPSystem');
 
 // ========== ENDPOINT A: ESTADO ACTUAL DEL CLUB ==========
 
