@@ -6,10 +6,13 @@ const {
   getClubCourseStats,
   getUserCoursesById
 } = require('../controllers/api_booksy.controller');
-const { authenticateExternalAPI } = require('../middleware/apiAuth.middleware');
 
-// 🔒 Aplicar autenticación a TODAS las rutas de la API Booksy
-router.use(authenticateExternalAPI);
+// Importar el nuevo middleware JWT
+const { authenticateJWT, authenticateFlexible } = require('../middleware/jwtAuth.middleware');
+
+// 🔒 Aplicar autenticación JWT a TODAS las rutas de la API Booksy
+// Usar authenticateFlexible para mantener compatibilidad con API Keys existentes
+router.use(authenticateFlexible(['read'])); // Requiere scope 'read'
 
 // Rutas protegidas para sistemas externos
 
@@ -21,15 +24,15 @@ router.use(authenticateExternalAPI);
 router.get('/users', getUsersWithCourses);
 
 /**
- * GET /api/booksy/users/:userId
- * Obtiene información específica de un usuario con sus cursos
+ * GET /api/booksy/users/:userId/courses
+ * Obtiene cursos específicos de un usuario por su ID
  */
-router.get('/users/:userId', getUserCoursesById);
+router.get('/users/:userId/courses', getUserCoursesById);
 
 /**
- * GET /api/booksy/clubs/stats
- * Obtiene estadísticas generales de cursos por club
+ * GET /api/booksy/stats/club/:clubId
+ * Estadísticas de progreso de lectura de un club específico
  */
-router.get('/clubs/stats', getClubCourseStats);
+router.get('/stats/club/:clubId', getClubCourseStats);
 
 module.exports = router;

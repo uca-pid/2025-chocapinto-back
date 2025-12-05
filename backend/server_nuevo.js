@@ -15,6 +15,7 @@ const rankingRoutes = require('./routes/ranking.routes');
 const periodoRoutes = require('./routes/periodo.routes');
 const rankingGlobalRoutes = require('./routes/ranking.global.routes');
 const apiBooksyRoutes = require('./routes/api_booksy.routes');
+const authExternalRoutes = require('./routes/auth.external.routes');
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use('/api/booksy', cors({
 // CORS general para el resto de rutas
 app.use(cors());
 
+app.use('/api/external/auth', authExternalRoutes);
 // Usar rutas
 app.use('/api/booksy', apiBooksyRoutes); // API externa protegida
 app.use('/api/auth', authRoutes);
@@ -82,6 +84,7 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
   console.log(`📚 API disponible en http://localhost:${PORT}`);
+  console.log(`🔐 OAuth 2.0 Token endpoint: http://localhost:${PORT}/api/external/auth/token`);
 });
 
 module.exports = app;
