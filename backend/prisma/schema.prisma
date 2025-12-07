@@ -29,6 +29,8 @@ model User {
   xp     Int @default(0)
   level  Int @default(1)
   resetTokens PasswordResetToken[]
+  confirmacionesAsistencia ConfirmacionAsistencia[]
+  asistenciasReales        AsistenciaReal[]
 
 }
 
@@ -67,6 +69,7 @@ model Club {
   readingHistory  ReadingHistory[]
   clubCategories ClubCategoria[] @relation("ClubToClubCategoria")
   periodosLectura PeriodoLectura[] // Períodos de lectura del club
+  sesionesLectura  SesionLectura[]
 }
 
 model Book {
@@ -111,6 +114,7 @@ model ClubBook {
   // Nuevas relaciones para períodos de lectura
   opcionesVotacion   VotacionOpcion[]
   periodoGanador     PeriodoLectura?  @relation("LibroGanador")
+  sesionesLectura  SesionLectura[]
 
   @@unique([clubId, bookId])
 }
@@ -224,4 +228,88 @@ model Voto {
   // Un usuario solo puede votar una vez por opción
   @@unique([opcionId, userId])
   @@map("votos")
+}
+
+// ========== SISTEMA DE SESIONES DE LECTURA Y AGENDA ==========
+
+// Sesiones de lectura programadas
+model SesionLectura {
+  id              Int      @id @default(autoincrement())
+  
+  // Club al que pertenece
+  club            Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  clubId          Int
+  
+  // Libro asociado (opcional - puede ser una sesión general)
+  clubBook        ClubBook? @relation(fields: [clubBookId], references: [id])
+  clubBookId      Int?
+  
+  // Información de la sesión
+  titulo          String   // Ej: "Debate capítulos 1-5"
+  descripcion     String?  // Notas o consigna
+  
+  // Fecha y hora
+  fechaHora       DateTime
+  
+  // Lugar (dirección física o link de videollamada)
+  lugar           String
+  
+  // Estado de la sesión
+  estado          String   @default("PROGRAMADA") // PROGRAMADA, COMPLETADA, CANCELADA
+  
+  // Confirmaciones de asistencia
+  confirmaciones  ConfirmacionAsistencia[]
+  
+  // Registro de asistencia real
+  asistencias     AsistenciaReal[]
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("sesiones_lectura")
+}
+
+// Confirmación de asistencia (antes del evento)
+model ConfirmacionAsistencia {
+  id        Int      @id @default(autoincrement())
+  
+  // Sesión a la que confirma
+  sesion    SesionLectura @relation(fields: [sesionId], references: [id], onDelete: Cascade)
+  sesionId  Int
+  
+  // Usuario que confirma
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  
+  // Estado: "ASISTIRE", "NO_VOY", "TAL_VEZ"
+  estado    String
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Un usuario solo puede confirmar una vez por sesión
+  @@unique([sesionId, userId])
+  @@map("confirmaciones_asistencia")
+}
+
+// Registro de asistencia real (después del evento)
+model AsistenciaReal {
+  id        Int      @id @default(autoincrement())
+  
+  // Sesión a la que asistió
+  sesion    SesionLectura @relation(fields: [sesionId], references: [id], onDelete: Cascade)
+  sesionId  Int
+  
+  // Usuario que asistió
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  
+  // Timestamp del registro
+  createdAt DateTime @default(now())
+  
+  // Un usuario solo puede registrarse una vez por sesión
+  @@unique([sesionId, userId])
+  @@map("asistencias_reales")
 }
