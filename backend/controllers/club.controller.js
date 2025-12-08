@@ -205,6 +205,7 @@ const getClubById = async (req, res) => {
         ownerName,
         imagen: club.imagen,
         readBooks: club.clubBooks.map(clubBook => ({
+          clubBookId: clubBook.id,
           id: clubBook.book.id,
           title: clubBook.book.title,
           author: clubBook.book.author,

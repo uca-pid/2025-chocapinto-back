@@ -81,7 +81,7 @@ app.use('/', historyRoutes);
 app.use('/', rankingRoutes);
 app.use('/', periodoRoutes);
 app.use('/', rankingGlobalRoutes);
-app.use('/', sesionRoutes);
+app.use('/sesion', sesionRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

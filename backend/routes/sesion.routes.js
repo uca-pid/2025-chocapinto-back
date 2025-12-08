@@ -1,10 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const sesionController = require("../controllers/sesion.controller");
-const { authenticateToken } = require("../middleware/jwtAuth.middleware");
 
-// Todas las rutas requieren autenticación
-router.use(authenticateToken);
+
 
 // Crear sesión (solo moderadores/owner)
 router.post("/", sesionController.crearSesion);
