@@ -572,7 +572,7 @@ async function obtenerProximasSesionesUsuario(req, res) {
 async function actualizarSesion(req, res) {
   try {
     const { sesionId } = req.params;
-    const { titulo, descripcion, fechaHora, lugar, estado } = req.body;
+    const { titulo, descripcion, fechaHora, lugar, estado, clubBookId } = req.body;
     const username = req.body.username;
 
     const user = await prisma.user.findUnique({
@@ -619,6 +619,7 @@ async function actualizarSesion(req, res) {
     if (fechaHora) datosActualizacion.fechaHora = new Date(fechaHora);
     if (lugar) datosActualizacion.lugar = lugar;
     if (estado) datosActualizacion.estado = estado;
+    if (clubBookId !== undefined) datosActualizacion.clubBookId = clubBookId ? parseInt(clubBookId) : null;
 
     const sesionActualizada = await prisma.sesionLectura.update({
       where: { id: parseInt(sesionId) },
