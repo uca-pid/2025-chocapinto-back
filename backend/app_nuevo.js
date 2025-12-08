@@ -10,6 +10,7 @@ const categoriaRoutes = require('./routes/categoria.routes');
 const authRoutes = require('./routes/auth.routes');
 const historyRoutes = require('./routes/history.routes');
 const periodoRoutes = require('./routes/periodo.routes');
+const sesionRoutes = require('./routes/sesion.routes');
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api', periodoRoutes);
+app.use('/api/sesiones', sesionRoutes);
 
 
 // Mantener rutas legacy para compatibilidad
@@ -37,6 +39,7 @@ app.use('/', categoriaRoutes);
 app.use('/', authRoutes);
 app.use('/', historyRoutes);
 app.use('/', periodoRoutes);
+app.use('/sesiones', sesionRoutes);
 
 // Ruta de salud
 app.get('/health', (req, res) => {
