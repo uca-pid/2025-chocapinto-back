@@ -5,8 +5,6 @@ const { sendPasswordResetEmail } = require("../utils/mail");
 const bcrypt = require("bcryptjs");
 const { hashPassword, comparePassword } = require('../utils/hashPassword');
 const { validateRequiredFields, validateEmail, validatePassword } = require('../utils/validateFields');
-const { Resend } = require('resend');
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 const register = async (req, res) => {
   try {
@@ -161,19 +159,11 @@ const requestPasswordReset = async (req, res) => {
             }
         });
 
-        // 4. Enviar Email con Resend
+        // 4. Enviar Email con Nodemailer
         // OJO: Cambia la URL por la de tu Frontend en Render
         const resetLink = `https://booksy-front-juani.onrender.com/reset-password.html?token=${resetToken}`;
 
-        await resend.emails.send({
-            from: 'onboarding@resend.dev', // Usa este mail de prueba de ellos
-            to: email, 
-            subject: 'Recupera tu contraseña en Booksy',
-            html: `<p>Hola ${user.username},</p>
-                   <p>Has solicitado restablecer tu contraseña.</p>
-                   <p>Haz clic aquí para crear una nueva: <a href="${resetLink}">Restablecer Contraseña</a></p>
-                   <p>Este enlace vence en 1 hora.</p>`
-        });
+        await sendPasswordResetEmail(email, resetLink);
 
         res.json({ success: true, message: "Correo enviado" });
 
