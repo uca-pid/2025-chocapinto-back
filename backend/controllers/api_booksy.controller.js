@@ -126,7 +126,7 @@ const getUsersWithCourses = async (req, res) => {
     // Filtrar solo usuarios que tienen cursos activos
     const activeUsers = usersWithCourses.filter(user => user.totalCourses > 0);
 
-    console.log('📡 API Externa solicita todos los usuarios con cursos');
+    
     
     const responseData = {
       success: true,
@@ -212,7 +212,7 @@ const getClubCourseStats = async (req, res) => {
       };
     });
 
-    console.log('📡 API Externa solicita estadísticas de clubes');
+    
     
     const responseData = {
       success: true,
@@ -275,21 +275,9 @@ const getUserCoursesById = async (req, res) => {
       });
     }
 
-    // Debug: información completa para diagnóstico
-    console.log(`🔍 DEBUG Usuario ${userId}:`);
-    console.log(`- Membresías: ${user.memberships.length}`);
-    console.log(`- Historial de lectura: ${user.readingHistory.length}`);
+   
     
-    user.memberships.forEach(membership => {
-      console.log(`- Club ${membership.club.id} (${membership.club.name}): ${membership.club.clubBooks.length} libros`);
-      membership.club.clubBooks.forEach(clubBook => {
-        console.log(`  - Libro: "${clubBook.book.title}" (id_api: ${clubBook.book.id_api})`);
-      });
-    });
-
-    user.readingHistory.forEach(history => {
-      console.log(`- Historia: "${history.book.title}" en club ${history.clubId} - Estado: ${history.estado} (id_api: ${history.book.id_api})`);
-    });
+    
 
     // Procesar cursos del usuario específico
     const userCourses = [];
@@ -374,7 +362,7 @@ const getUserCoursesById = async (req, res) => {
       }
     };
 
-    console.log(`📡 API Externa solicita cursos del usuario ${userId}`);
+    
     res.json(addAPIMetadata(req, responseData));
 
   } catch (error) {

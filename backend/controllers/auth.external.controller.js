@@ -52,9 +52,7 @@ class AuthExternalController {
       // 5. Generar tokens
       const tokens = authJWTService.generateTokenPair(client_id, finalScopes);
 
-      // 6. Log de la operación
-      console.log(`🎫 Token generado para cliente: ${client_id} con scopes: [${finalScopes.join(', ')}]`);
-
+      
       // 7. Respuesta OAuth 2.0 estándar
       res.json({
         access_token: tokens.access_token,

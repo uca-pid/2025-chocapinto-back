@@ -4,6 +4,7 @@ const { validateRequiredFields } = require('../utils/validateFields');
 const { computeNewXpAndLevel, XP_PER_BOOK_FINISHED } = require('../utils/XPSystem');
 const { crearNotificacion } = require('./notificaciones.controller');
 const { otorgarXP } = require('../utils/XPRewards');
+const { showNotification } = require('../../../2025-chocapinto-front/componentes/notificacion');
 
 const addBookToClub = async (req, res) => {
   try {
@@ -12,9 +13,7 @@ const addBookToClub = async (req, res) => {
     // El clubId puede venir del body o de los params de la URL.
     const clubId = req.body.clubId || req.params.id;
 
-    console.log("Datos recibidos en addBookToClub:", req.body);
-    console.log("Club ID desde params:", req.params.id);
-    console.log("Club ID final:", clubId);
+    
 
     // Solo title, clubId y username son realmente requeridos
     if (!title || !clubId || !username) {
@@ -59,14 +58,7 @@ const addBookToClub = async (req, res) => {
       }
     }
     
-    console.log("🔍 Datos recibidos para libro:", {
-      title,
-      author: cleanAuthor,
-      id_api_original: id_api,
-      cleanIdApi: cleanIdApi,
-      cleanIdApi_type: typeof cleanIdApi,
-      portada: portada || thumbnail
-    });
+    
     // La portada puede venir como 'portada' o 'thumbnail'
     const cleanPortada = (portada || thumbnail) && (portada || thumbnail) !== "null" && (portada || thumbnail).trim() !== "" 
       ? (portada || thumbnail).trim() 
@@ -132,7 +124,7 @@ const addBookToClub = async (req, res) => {
 
     // Procesar categorías si existen
     if (categorias && Array.isArray(categorias) && categorias.length > 0) {
-      console.log("Categorías recibidas:", categorias);
+      
       
       const categoriasIds = [];
       
@@ -207,7 +199,7 @@ const removeBookFromClub = async (req, res) => {
     const bookId = req.body.bookId || req.params.bookId;
     const username = req.body.username;
 
-    console.log("Datos para eliminar libro:", { clubId, bookId, username });
+    
 
     if (!clubId || !bookId || !username) {
       return res.status(400).json({ 
@@ -257,7 +249,7 @@ const removeBookFromClub = async (req, res) => {
         throw new Error("El libro no está en este club");
       }
 
-      console.log(`Eliminando libro ${bookId} del club ${clubId}, ClubBook ID: ${clubBook.id}`);
+      
 
       // 1. Eliminar opciones de votación relacionadas con este ClubBook
       try {
@@ -266,9 +258,10 @@ const removeBookFromClub = async (req, res) => {
             clubBookId: clubBook.id
           }
         });
-        console.log(`Eliminadas ${deletedVotaciones.count} opciones de votación`);
+        
       } catch (votacionError) {
-        console.log("Error al eliminar votaciones:", votacionError.message);
+        showNotification("error","Error al eliminar opciones de votación");
+
       }
 
       // 2. Actualizar períodos donde este libro era ganador
@@ -281,9 +274,9 @@ const removeBookFromClub = async (req, res) => {
             libroGanadorId: null
           }
         });
-        console.log(`Actualizados ${updatedPeriodos.count} períodos de lectura`);
+        
       } catch (periodoError) {
-        console.log("Error al actualizar períodos:", periodoError.message);
+        showNotification("error","Error al actualizar períodos de lectura");
       }
 
       // 3. Eliminar comentarios relacionados con este ClubBook
@@ -293,9 +286,9 @@ const removeBookFromClub = async (req, res) => {
             clubBookId: clubBook.id
           }
         });
-        console.log(`Eliminados ${deletedComments.count} comentarios`);
+        
       } catch (commentError) {
-        console.log("Error al eliminar comentarios:", commentError.message);
+        showNotification("error","Error al eliminar comentarios");
         // Intentar con la tabla comentario si comment no existe
         try {
           await tx.comentario.deleteMany({
@@ -305,7 +298,7 @@ const removeBookFromClub = async (req, res) => {
             }
           });
         } catch (comentarioError) {
-          console.log("Tabla comentario tampoco existe:", comentarioError.message);
+          showNotification("error","Error al eliminar comentarios (tabla comentario)");
         }
       }
 
@@ -317,16 +310,16 @@ const removeBookFromClub = async (req, res) => {
             bookId: Number(bookId)
           }
         });
-        console.log(`Eliminados ${deletedHistory.count} registros de historial`);
+        
       } catch (historyError) {
-        console.log("Error al eliminar historial:", historyError.message);
+        showNotification("error","Error al eliminar historial de lectura");
       }
 
       // 5. Eliminar de ClubBook
       await tx.clubBook.delete({
         where: { id: clubBook.id }
       });
-      console.log("ClubBook eliminado");
+      
 
       // 6. Verificar si el libro está en otros clubes
       const otherClubBooks = await tx.clubBook.findFirst({
@@ -335,7 +328,7 @@ const removeBookFromClub = async (req, res) => {
 
       // Si no está en ningún club, eliminarlo completamente
       if (!otherClubBooks) {
-        console.log(`Intentando eliminar libro completamente con id: ${bookId}`);
+        
         
         // Verificar qué datos tiene el libro antes de eliminarlo
         const bookToDelete = await tx.book.findUnique({
@@ -346,18 +339,18 @@ const removeBookFromClub = async (req, res) => {
             clubBooks: true
           }
         });
-        console.log("Datos del libro a eliminar:", bookToDelete);
+        
         
         // Verificar que no haya relaciones pendientes
         if (bookToDelete.readingHistory.length > 0) {
-          console.log("Eliminando historial residual...");
+          
           await tx.readingHistory.deleteMany({
             where: { bookId: Number(bookId) }
           });
         }
 
         if (bookToDelete.clubBooks.length > 0) {
-          console.log("Hay ClubBooks residuales, no eliminar el libro");
+          
           return;
         }
 
@@ -371,15 +364,15 @@ const removeBookFromClub = async (req, res) => {
               }
             }
           });
-          console.log("Categorías desvinculadas");
+          
           
           // Ahora eliminar el libro
           await tx.book.delete({
             where: { id: Number(bookId) }
           });
-          console.log("Libro eliminado completamente de la base de datos");
+          
         } catch (bookDeleteError) {
-          console.error("Error específico al eliminar libro:", bookDeleteError);
+          showNotification("error","Error al eliminar el libro completamente");
           throw bookDeleteError;
         }
       } else {
@@ -594,7 +587,7 @@ const searchCursos = async (req, res) => {
         // Solo agregamos ?select=* para asegurar que traiga las columnas
         const url = `${SUPABASE_URL}?select=*`;
 
-        console.log("🔗 Conectando a Supabase...");
+        
 
         // 3. Petición Fetch
         const response = await fetch(url, {
@@ -615,10 +608,7 @@ const searchCursos = async (req, res) => {
         
         const cursosRaw = await response.json();
         
-        // Debug: Ver qué propiedades tienen realmente los cursos
-        if (cursosRaw.length > 0) {
-            console.log("📦 Ejemplo de curso recibido:", Object.keys(cursosRaw[0]));
-        }
+        
 
         // 4. FILTRADO LOCAL (Más seguro)
         // Filtramos aquí en tu servidor en lugar de en la URL
@@ -627,7 +617,7 @@ const searchCursos = async (req, res) => {
         if (query) {
             const queryLower = query.toLowerCase();
             cursosFiltrados = cursosRaw.filter(curso => {
-                // Buscamos en las propiedades probables (ajusta esto si ves el log)
+              
                 const titulo = curso.nombre || curso.titulo || curso.name || curso.descripcion || "";
                 return titulo.toLowerCase().includes(queryLower);
             });
@@ -648,7 +638,7 @@ const searchCursos = async (req, res) => {
             descripcion: curso.descripcion || "Curso de SeñasApp"
         }));
 
-        console.log(`✅ Encontrados ${cursosComoLibros.length} cursos.`);
+        
         res.json({ success: true, cursos: cursosComoLibros });
 
     } catch (error) {
@@ -710,7 +700,7 @@ const agregarCursoComoLibro = async (req, res) => {
         // Otorgar XP por agregar libro (curso)
         await otorgarXP(user.id, 'AGREGAR_LIBRO');
         
-        console.log(`✅ Curso agregado como libro: ${title}`);
+        
         
         res.json({ 
             success: true, 
