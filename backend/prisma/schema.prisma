@@ -37,13 +37,13 @@ model User {
 
 model PasswordResetToken {
   id        Int      @id @default(autoincrement())
-  token     String
+  token     String   @unique // El código largo y secreto
+  userId    Int      // A quién pertenece
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime // Cuándo deja de servir (ej: en 1 hora)
   createdAt DateTime @default(now())
-  expiresAt DateTime
-  used      Boolean  @default(false)
 
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId Int
+  @@map("password_reset_tokens")
 }
 
 
