@@ -1,5 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const { notificarMiembrosClub } = require('./notificaciones.controller');
 
 /**
  * Crear una nueva sesión de lectura (solo moderadores/owner)
@@ -92,6 +93,41 @@ async function crearSesion(req, res) {
         }
       }
     });
+
+    // Obtener información del club para la notificación
+    const club = await prisma.club.findUnique({
+      where: { id: parseInt(clubId) },
+      select: { name: true }
+    });
+
+    // Crear notificaciones para todos los miembros del club (excepto el creador)
+    try {
+      const fechaFormateada = new Date(fechaHora).toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      await notificarMiembrosClub(
+        parseInt(clubId),
+        'SESION_CREADA',
+        '📅 Nueva sesión de lectura',
+        `Se ha programado una nueva sesión: "${titulo}" para el ${fechaFormateada}`,
+        {
+          sesionId: sesion.id,
+          titulo: sesion.titulo,
+          fechaHora: sesion.fechaHora,
+          lugar: sesion.lugar,
+          clubName: club.name
+        },
+        user.id // Excluir al creador de las notificaciones
+      );
+    } catch (notifError) {
+      console.error("Error al crear notificaciones:", notifError);
+      // No fallar la creación de la sesión si las notificaciones fallan
+    }
 
     return res.json({
       success: true,
