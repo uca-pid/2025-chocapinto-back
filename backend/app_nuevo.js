@@ -11,6 +11,8 @@ const authRoutes = require('./routes/auth.routes');
 const historyRoutes = require('./routes/history.routes');
 const periodoRoutes = require('./routes/periodo.routes');
 const sesionRoutes = require('./routes/sesion.routes');
+const notificacionesRoutes = require('./routes/notificaciones.routes');
+const scheduledRoutes = require('./routes/scheduled.routes');
 
 const app = express();
 
@@ -28,6 +30,8 @@ app.use('/api/categorias', categoriaRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api', periodoRoutes);
 app.use('/api/sesiones', sesionRoutes);
+app.use('/api/notificaciones', notificacionesRoutes);
+app.use('/api/scheduled', scheduledRoutes);
 
 
 // Mantener rutas legacy para compatibilidad

@@ -750,6 +750,75 @@ async function eliminarSesion(req, res) {
   }
 }
 
+/**
+ * Verificar y notificar sesiones que ocurren en menos de 24 horas
+ */
+async function notificarSesionesCercanas() {
+  try {
+    const ahora = new Date();
+    const en24Horas = new Date(ahora.getTime() + 24 * 60 * 60 * 1000);
+
+    // Buscar sesiones programadas que ocurren entre ahora y 24 horas
+    const sesionesCercanas = await prisma.sesionLectura.findMany({
+      where: {
+        estado: 'PROGRAMADA',
+        fechaHora: {
+          gte: ahora,
+          lte: en24Horas
+        }
+      },
+      include: {
+        club: true,
+        clubBook: {
+          include: {
+            book: true
+          }
+        }
+      }
+    });
+
+    console.log(`🔍 Verificando sesiones cercanas: ${sesionesCercanas.length} encontradas`);
+
+    for (const sesion of sesionesCercanas) {
+      const horasRestantes = Math.round((new Date(sesion.fechaHora) - ahora) / (1000 * 60 * 60));
+      const fechaFormateada = new Date(sesion.fechaHora).toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      try {
+        await notificarMiembrosClub(
+          sesion.clubId,
+          'SESION_PROXIMA',
+          '📅 Sesión próxima',
+          `Recordatorio: La sesión "${sesion.titulo}" en ${sesion.club.name} es el ${fechaFormateada}${sesion.lugar ? ` en ${sesion.lugar}` : ''}. ¡No olvides asistir!`,
+          {
+            sesionId: sesion.id,
+            titulo: sesion.titulo,
+            clubName: sesion.club.name,
+            fechaHora: sesion.fechaHora,
+            lugar: sesion.lugar,
+            horasRestantes,
+            libro: sesion.clubBook?.book?.title
+          },
+          null
+        );
+
+        console.log(`📢 Notificación enviada: Sesión "${sesion.titulo}" en ${horasRestantes}h`);
+      } catch (notifError) {
+        console.error(`⚠️ Error al notificar sesión cercana (${sesion.id}):`, notifError.message);
+      }
+    }
+
+    return { count: sesionesCercanas.length };
+  } catch (error) {
+    console.error('❌ Error al verificar sesiones cercanas:', error);
+    return { count: 0, error: error.message };
+  }
+}
+
 module.exports = {
   crearSesion,
   obtenerSesionesClub,
@@ -758,5 +827,6 @@ module.exports = {
   registrarAsistenciaReal,
   obtenerProximasSesionesUsuario,
   actualizarSesion,
-  eliminarSesion
+  eliminarSesion,
+  notificarSesionesCercanas
 };

@@ -13,6 +13,9 @@ const historyRoutes = require('./routes/history.routes');
 const rankingRoutes = require('./routes/ranking.routes');
 const apiBooksyRoutes = require('./routes/api_booksy.routes');
 
+// Importar tareas programadas
+const { iniciarVerificacionesAutomaticas } = require('./utils/scheduledTasks');
+
 const app = express();
 
 // Middlewares
@@ -70,6 +73,10 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
   console.log(`📚 API disponible en http://localhost:${PORT}`);
+  
+  // Iniciar verificaciones automáticas de notificaciones
+  console.log('⏰ Iniciando sistema de notificaciones automáticas...');
+  iniciarVerificacionesAutomaticas();
 });
 
 module.exports = app;

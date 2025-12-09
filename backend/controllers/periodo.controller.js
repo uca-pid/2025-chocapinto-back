@@ -1090,6 +1090,74 @@ const concluirLecturaAutomatica = async (periodo) => {
     }
 };
 
+/**
+ * Verificar y notificar votaciones que vencen en menos de 24 horas
+ */
+const notificarVotacionesPorVencer = async () => {
+    try {
+        const ahora = new Date();
+        const en24Horas = new Date(ahora.getTime() + 24 * 60 * 60 * 1000);
+
+        // Buscar votaciones que cierran entre ahora y 24 horas
+        const votacionesPorVencer = await prisma.periodoLectura.findMany({
+            where: {
+                estado: 'VOTACION',
+                fechaFinVotacion: {
+                    gte: ahora,
+                    lte: en24Horas
+                },
+                // Evitar notificar múltiples veces con un campo adicional si es necesario
+                // notificadoProximoCierre: false
+            },
+            include: {
+                club: true,
+                opciones: {
+                    include: {
+                        clubBook: {
+                            include: {
+                                book: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        console.log(`🔍 Verificando votaciones por vencer: ${votacionesPorVencer.length} encontradas`);
+
+        for (const periodo of votacionesPorVencer) {
+            const horasRestantes = Math.round((new Date(periodo.fechaFinVotacion) - ahora) / (1000 * 60 * 60));
+            const librosNombres = periodo.opciones.map(o => o.clubBook.book.title).join(', ');
+
+            try {
+                await notificarMiembrosClub(
+                    periodo.clubId,
+                    'VOTACION_POR_VENCER',
+                    '⏰ Votación termina pronto',
+                    `La votación "${periodo.nombre}" cierra en aproximadamente ${horasRestantes} horas. ¡No olvides votar! Libros disponibles: ${librosNombres}`,
+                    {
+                        periodoId: periodo.id,
+                        nombre: periodo.nombre,
+                        clubName: periodo.club.name,
+                        horasRestantes,
+                        fechaFinVotacion: periodo.fechaFinVotacion
+                    },
+                    null
+                );
+
+                console.log(`📢 Notificación enviada: Votación "${periodo.nombre}" por vencer en ${horasRestantes}h`);
+            } catch (notifError) {
+                console.error(`⚠️ Error al notificar votación por vencer (${periodo.id}):`, notifError.message);
+            }
+        }
+
+        return { count: votacionesPorVencer.length };
+    } catch (error) {
+        console.error('❌ Error al verificar votaciones por vencer:', error);
+        return { count: 0, error: error.message };
+    }
+};
+
 module.exports = {
     obtenerEstadoActual,
     crearPeriodo,
@@ -1097,5 +1165,6 @@ module.exports = {
     cerrarVotacion,
     concluirLectura,
     obtenerHistorial,
-    debugLibrosClub
+    debugLibrosClub,
+    notificarVotacionesPorVencer
 };

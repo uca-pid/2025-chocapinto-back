@@ -18,6 +18,10 @@ const apiBooksyRoutes = require('./routes/api_booksy.routes');
 const authExternalRoutes = require('./routes/auth.external.routes');
 const sesionRoutes = require('./routes/sesion.routes');
 const notificacionesRoutes = require('./routes/notificaciones.routes');
+const scheduledRoutes = require('./routes/scheduled.routes');
+
+// Importar tareas programadas
+const { iniciarVerificacionesAutomaticas } = require('./utils/scheduledTasks');
 
 const app = express();
 
@@ -70,6 +74,7 @@ app.use('/api', periodoRoutes);
 app.use('/api/global/ranking', rankingGlobalRoutes);
 app.use('/api/sesiones', sesionRoutes);
 app.use('/api/notificaciones', notificacionesRoutes);
+app.use('/api/scheduled', scheduledRoutes);
 
 
 // Rutas legacy (mantener compatibilidad)
@@ -90,6 +95,10 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
   console.log(`📚 API disponible en http://localhost:${PORT}`);
   console.log(`🔐 OAuth 2.0 Token endpoint: http://localhost:${PORT}/api/external/auth/token`);
+  
+  // Iniciar verificaciones automáticas de notificaciones
+  console.log('⏰ Iniciando sistema de notificaciones automáticas...');
+  iniciarVerificacionesAutomaticas();
 });
 
 module.exports = app;

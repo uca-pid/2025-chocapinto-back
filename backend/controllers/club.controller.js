@@ -1,6 +1,7 @@
 // src/controllers/club.controller.js
 const prisma = require('../db');
 const { validateRequiredFields } = require('../utils/validateFields');
+const { crearNotificacion } = require('./notificaciones.controller');
 
 const createClub = async (req, res) => {
   try {
@@ -325,6 +326,40 @@ const manageMembershipRequest = async (req, res) => {
           role: 'LECTOR'
         }
       });
+      
+      // Notificar al usuario que fue aceptado
+      try {
+        await crearNotificacion(
+          solicitud.userId,
+          'SOLICITUD_ACEPTADA',
+          '✅ Solicitud aceptada',
+          `Tu solicitud para unirte a "${solicitud.club.name}" ha sido aceptada. ¡Bienvenido!`,
+          { 
+            clubId: clubId, 
+            clubName: solicitud.club.name 
+          }
+        );
+        console.log(`📢 Notificación enviada: Solicitud aceptada para usuario ${solicitud.userId}`);
+      } catch (notifError) {
+        console.error('⚠️ Error al enviar notificación de solicitud aceptada:', notifError.message);
+      }
+    } else {
+      // Notificar al usuario que fue rechazado
+      try {
+        await crearNotificacion(
+          solicitud.userId,
+          'SOLICITUD_RECHAZADA',
+          '❌ Solicitud rechazada',
+          `Tu solicitud para unirte a "${solicitud.club.name}" ha sido rechazada.`,
+          { 
+            clubId: clubId, 
+            clubName: solicitud.club.name 
+          }
+        );
+        console.log(`📢 Notificación enviada: Solicitud rechazada para usuario ${solicitud.userId}`);
+      } catch (notifError) {
+        console.error('⚠️ Error al enviar notificación de solicitud rechazada:', notifError.message);
+      }
     }
 
     res.json({ success: true, message: aceptar ? "Usuario agregado al club" : "Solicitud rechazada" });
