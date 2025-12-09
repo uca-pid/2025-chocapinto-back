@@ -31,6 +31,7 @@ model User {
   resetTokens PasswordResetToken[]
   confirmacionesAsistencia ConfirmacionAsistencia[]
   asistenciasReales        AsistenciaReal[]
+  notificaciones  Notificacion[] 
 
 }
 
@@ -312,4 +313,35 @@ model AsistenciaReal {
   // Un usuario solo puede registrarse una vez por sesión
   @@unique([sesionId, userId])
   @@map("asistencias_reales")
+}
+
+
+
+// ========== SISTEMA DE NOTIFICACIONES ==========
+
+model Notificacion {
+  id        Int      @id @default(autoincrement())
+  
+  // Usuario que recibe la notificación
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  
+  // Tipo de notificación
+  tipo      String   // "SESION_CREADA", "SESION_CANCELADA", "VOTACION_INICIADA", "LIBRO_AGREGADO", etc.
+  
+  // Título y mensaje
+  titulo    String
+  mensaje   String
+  
+  // Datos adicionales en formato JSON (para links, ids, etc)
+  datos     String?  // JSON string: {clubId, sesionId, etc}
+  
+  // Estado de lectura
+  leida     Boolean  @default(false)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  @@map("notificaciones")
+  @@index([userId, leida]) // Índice para consultas rápidas de notificaciones no leídas
 }
