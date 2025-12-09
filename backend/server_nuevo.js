@@ -92,12 +92,10 @@ app.use('/sesion', sesionRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-  console.log(`📚 API disponible en http://localhost:${PORT}`);
-  console.log(`🔐 OAuth 2.0 Token endpoint: http://localhost:${PORT}/api/external/auth/token`);
   
+  console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
   // Iniciar verificaciones automáticas de notificaciones
-  console.log('⏰ Iniciando sistema de notificaciones automáticas...');
+  
   iniciarVerificacionesAutomaticas();
 });
 
