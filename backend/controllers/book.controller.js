@@ -3,6 +3,7 @@ const prisma = require('../db');
 const { validateRequiredFields } = require('../utils/validateFields');
 const { computeNewXpAndLevel, XP_PER_BOOK_FINISHED } = require('../utils/XPSystem');
 const { crearNotificacion } = require('./notificaciones.controller');
+const { otorgarXP } = require('../utils/XPRewards');
 
 const addBookToClub = async (req, res) => {
   try {
@@ -125,6 +126,9 @@ const addBookToClub = async (req, res) => {
         estado: "por_leer"
       }
     });
+
+    // Otorgar XP por agregar libro
+    await otorgarXP(user.id, 'AGREGAR_LIBRO');
 
     // Procesar categorías si existen
     if (categorias && Array.isArray(categorias) && categorias.length > 0) {
@@ -702,6 +706,9 @@ const agregarCursoComoLibro = async (req, res) => {
 
             return { libro: nuevoLibro, clubBook: nuevoClubBook };
         });
+        
+        // Otorgar XP por agregar libro (curso)
+        await otorgarXP(user.id, 'AGREGAR_LIBRO');
         
         console.log(`✅ Curso agregado como libro: ${title}`);
         
