@@ -1,9 +1,12 @@
 const prisma = require('../db');
 
+/**
+ * Obtiene el ranking global de usuarios por cantidad de clubes
+ * Ruta: GET /api/ranking/global?top=N
+ */
 const getGlobalRanking = async (req, res) => {
   try {
     const topN = Number(req.query.top) || 3;
-    console.log('Obteniendo ranking global (top', topN, ')');
 
     const users = await prisma.user.findMany({
       select: {
@@ -18,7 +21,7 @@ const getGlobalRanking = async (req, res) => {
       id: u.id,
       username: u.username,
       clubsCount: Array.isArray(u.memberships) ? u.memberships.length : 0,
-      avatar: u.avatar, // Incluir el avatar real del usuario
+      avatar: u.avatar,
     }));
 
     const top = usersWithCounts
@@ -31,14 +34,13 @@ const getGlobalRanking = async (req, res) => {
       id: u.id,
       username: u.username,
       clubsCount: u.clubsCount,
-      avatar: u.avatar, // Usar el avatar real del usuario
+      avatar: u.avatar,
     }));
 
-    console.log(`Ranking global calculado: ${ranking.length} usuarios`);
     return res.json({ success: true, ranking });
 
   } catch (error) {
-    console.error('Error al obtener ranking global:', error && (error.stack || error));
+    console.error('[ERROR] Error al obtener ranking global:', error);
 
     return res.status(500).json({ success: false, message: 'Error al obtener ranking global' });
   }
