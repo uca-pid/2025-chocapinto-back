@@ -5,13 +5,13 @@ const { otorgarXP } = require('../utils/XPRewards');
 
 /**
  * Crear una nueva sesión de lectura (solo moderadores/owner)
+ * Ruta: POST /api/sesiones
  */
 async function crearSesion(req, res) {
   try {
     const { clubId, clubBookId, titulo, descripcion, fechaHora, lugar } = req.body;
-    const username = req.body.username; // Del middleware de autenticación
+    const username = req.body.username;
 
-    // Validar campos requeridos
     if (!clubId || !titulo || !fechaHora || !lugar) {
       return res.status(400).json({
         success: false,
@@ -19,7 +19,6 @@ async function crearSesion(req, res) {
       });
     }
 
-    // Verificar que el usuario sea moderador u owner del club
     const user = await prisma.user.findUnique({
       where: { username }
     });
@@ -47,7 +46,6 @@ async function crearSesion(req, res) {
       });
     }
 
-    // Verificar que el libro pertenece al club (si se especifica)
     if (clubBookId) {
       const clubBook = await prisma.clubBook.findFirst({
         where: {
@@ -64,7 +62,6 @@ async function crearSesion(req, res) {
       }
     }
 
-    // Crear la sesión
     const sesion = await prisma.sesionLectura.create({
       data: {
         clubId: parseInt(clubId),
@@ -95,13 +92,11 @@ async function crearSesion(req, res) {
       }
     });
 
-    // Obtener información del club para la notificación
     const club = await prisma.club.findUnique({
       where: { id: parseInt(clubId) },
       select: { name: true }
     });
 
-    // Crear notificaciones para todos los miembros del club (excepto el creador)
     try {
       const fechaFormateada = new Date(fechaHora).toLocaleDateString('es-ES', {
         day: 'numeric',
@@ -123,11 +118,10 @@ async function crearSesion(req, res) {
           lugar: sesion.lugar,
           clubName: club.name
         },
-        user.id // Excluir al creador de las notificaciones
+        user.id
       );
     } catch (notifError) {
-      console.error("Error al crear notificaciones:", notifError);
-      // No fallar la creación de la sesión si las notificaciones fallan
+      console.error("[ERROR] Error al crear notificaciones:", notifError);
     }
 
     return res.json({
@@ -137,7 +131,7 @@ async function crearSesion(req, res) {
     });
 
   } catch (error) {
-    console.error("Error al crear sesión:", error);
+    console.error("[ERROR] Error al crear sesión:", error);
     return res.status(500).json({
       success: false,
       message: "Error al crear la sesión",
@@ -148,18 +142,16 @@ async function crearSesion(req, res) {
 
 /**
  * Obtener todas las sesiones de un club
+ * Ruta: GET /api/club/:clubId/sesiones?tipo=proximas|pasadas
  */
 async function obtenerSesionesClub(req, res) {
   try {
     const { clubId } = req.params;
-    const { tipo } = req.query; // "proximas" o "pasadas"
+    const { tipo } = req.query;
 
     const now = new Date();
-    
-    // Ajustar la hora actual restando 3 horas para compensar zona horaria Argentina (UTC-3)
     const nowArgentina = new Date(now.getTime() - (3 * 60 * 60 * 1000));
     
-    // Actualizar automáticamente sesiones programadas que ya pasaron su hora
     await prisma.sesionLectura.updateMany({
       where: {
         clubId: parseInt(clubId),
@@ -175,7 +167,6 @@ async function obtenerSesionesClub(req, res) {
       clubId: parseInt(clubId)
     };
 
-    // Filtrar por tipo
     if (tipo === "proximas") {
       whereCondition.estado = "PROGRAMADA";
     } else if (tipo === "pasadas") {
@@ -218,7 +209,6 @@ async function obtenerSesionesClub(req, res) {
       }
     });
 
-    // Calcular contadores para cada sesión
     const sesionesConContadores = sesiones.map(sesion => {
       const confirmaciones = sesion.confirmaciones;
       const asistire = confirmaciones.filter(c => c.estado === "ASISTIRE").length;
@@ -242,7 +232,7 @@ async function obtenerSesionesClub(req, res) {
     });
 
   } catch (error) {
-    console.error("Error al obtener sesiones:", error);
+    console.error("[ERROR] Error al obtener sesiones:", error);
     return res.status(500).json({
       success: false,
       message: "Error al obtener las sesiones",
@@ -253,6 +243,7 @@ async function obtenerSesionesClub(req, res) {
 
 /**
  * Obtener una sesión específica
+ * Ruta: GET /api/sesiones/:sesionId
  */
 async function obtenerSesion(req, res) {
   try {
@@ -304,7 +295,6 @@ async function obtenerSesion(req, res) {
       });
     }
 
-    // Calcular contadores
     const confirmaciones = sesion.confirmaciones;
     const contadores = {
       asistire: confirmaciones.filter(c => c.estado === "ASISTIRE").length,
@@ -322,7 +312,7 @@ async function obtenerSesion(req, res) {
     });
 
   } catch (error) {
-    console.error("Error al obtener sesión:", error);
+    console.error("[ERROR] Error al obtener sesión:", error);
     return res.status(500).json({
       success: false,
       message: "Error al obtener la sesión",
@@ -333,15 +323,15 @@ async function obtenerSesion(req, res) {
 
 /**
  * Confirmar asistencia a una sesión
+ * Ruta: POST /api/sesiones/:sesionId/confirmar
  */
 async function confirmarAsistencia(req, res) {
   try {
     const { sesionId } = req.params;
-    const { estado } = req.body; // "ASISTIRE", "NO_VOY", "TAL_VEZ"
+    const { estado } = req.body;
     const username = req.body.username;
 
-    // Validaciones
-    if (!["ASISTIRE", "NO_VOY", "TAL_VEZ"].includes(estado)) {
+    if (!['ASISTIRE', 'NO_VOY', 'TAL_VEZ'].includes(estado)) {
       return res.status(400).json({
         success: false,
         message: "Estado inválido. Debe ser: ASISTIRE, NO_VOY o TAL_VEZ"
@@ -359,7 +349,6 @@ async function confirmarAsistencia(req, res) {
       });
     }
 
-    // Verificar que la sesión existe
     const sesion = await prisma.sesionLectura.findUnique({
       where: { id: parseInt(sesionId) }
     });
@@ -371,7 +360,6 @@ async function confirmarAsistencia(req, res) {
       });
     }
 
-    // Verificar que el usuario es miembro del club
     const membership = await prisma.clubMember.findUnique({
       where: {
         userId_clubId: {
@@ -388,7 +376,6 @@ async function confirmarAsistencia(req, res) {
       });
     }
 
-    // Verificar si ya existía una confirmación previa
     const confirmacionPrevia = await prisma.confirmacionAsistencia.findUnique({
       where: {
         sesionId_userId: {
@@ -398,7 +385,6 @@ async function confirmarAsistencia(req, res) {
       }
     });
 
-    // Crear o actualizar confirmación
     const confirmacion = await prisma.confirmacionAsistencia.upsert({
       where: {
         sesionId_userId: {
@@ -425,10 +411,6 @@ async function confirmarAsistencia(req, res) {
       }
     });
 
-    // Otorgar XP solo si:
-    // 1. Confirma que asistirá (estado === 'ASISTIRE')
-    // 2. Es la primera vez que confirma (no existía confirmación previa)
-    //    O cambió de otro estado a ASISTIRE
     if (estado === 'ASISTIRE' && (!confirmacionPrevia || confirmacionPrevia.estado !== 'ASISTIRE')) {
       await otorgarXP(user.id, 'CONFIRMAR_ASISTENCIA');
     }
@@ -440,7 +422,7 @@ async function confirmarAsistencia(req, res) {
     });
 
   } catch (error) {
-    console.error("Error al confirmar asistencia:", error);
+    console.error("[ERROR] Error al confirmar asistencia:", error);
     return res.status(500).json({
       success: false,
       message: "Error al confirmar asistencia",
@@ -451,14 +433,14 @@ async function confirmarAsistencia(req, res) {
 
 /**
  * Registrar asistencia real (después de la sesión - solo moderadores)
+ * Ruta: POST /api/sesiones/:sesionId/asistencia
  */
 async function registrarAsistenciaReal(req, res) {
   try {
     const { sesionId } = req.params;
-    const { usuariosPresentes } = req.body; // Array de userIds
+    const { usuariosPresentes } = req.body;
     const username = req.body.username;
 
-    // Verificar que el usuario sea moderador u owner
     const user = await prisma.user.findUnique({
       where: { username }
     });
@@ -497,7 +479,6 @@ async function registrarAsistenciaReal(req, res) {
       });
     }
 
-    // Verificar si ya se había registrado asistencia previamente (para XP)
     const asistenciasPrevias = await prisma.asistenciaReal.findMany({
       where: { sesionId: parseInt(sesionId) },
       select: { userId: true }
@@ -505,12 +486,10 @@ async function registrarAsistenciaReal(req, res) {
     
     const usuariosPrevios = new Set(asistenciasPrevias.map(a => a.userId));
 
-    // Limpiar asistencias previas
     await prisma.asistenciaReal.deleteMany({
       where: { sesionId: parseInt(sesionId) }
     });
 
-    // Registrar nuevas asistencias
     const asistencias = await Promise.all(
       usuariosPresentes.map(userId =>
         prisma.asistenciaReal.create({
@@ -531,14 +510,12 @@ async function registrarAsistenciaReal(req, res) {
       )
     );
 
-    // Otorgar XP solo a los asistentes que NO estaban en la lista previa
     for (const asistencia of asistencias) {
       if (!usuariosPrevios.has(asistencia.userId)) {
         await otorgarXP(asistencia.userId, 'ASISTIR_SESION');
       }
     }
 
-    // Actualizar estado de la sesión a COMPLETADA
     await prisma.sesionLectura.update({
       where: { id: parseInt(sesionId) },
       data: { estado: "COMPLETADA" }
@@ -551,7 +528,7 @@ async function registrarAsistenciaReal(req, res) {
     });
 
   } catch (error) {
-    console.error("Error al registrar asistencia real:", error);
+    console.error("[ERROR] Error al registrar asistencia real:", error);
     return res.status(500).json({
       success: false,
       message: "Error al registrar la asistencia",
@@ -561,7 +538,8 @@ async function registrarAsistenciaReal(req, res) {
 }
 
 /**
- * Obtener próximas sesiones de todos los clubes del usuario (para notificaciones)
+ * Obtener próximas sesiones de todos los clubes del usuario
+ * Ruta: GET /api/sesiones/proximas
  */
 async function obtenerProximasSesionesUsuario(req, res) {
   try {
@@ -627,7 +605,7 @@ async function obtenerProximasSesionesUsuario(req, res) {
     });
 
   } catch (error) {
-    console.error("Error al obtener próximas sesiones:", error);
+    console.error("[ERROR] Error al obtener próximas sesiones:", error);
     return res.status(500).json({
       success: false,
       message: "Error al obtener próximas sesiones",
@@ -638,6 +616,7 @@ async function obtenerProximasSesionesUsuario(req, res) {
 
 /**
  * Actualizar sesión (solo moderadores/owner)
+ * Ruta: PUT /api/sesiones/:sesionId
  */
 async function actualizarSesion(req, res) {
   try {
@@ -710,7 +689,7 @@ async function actualizarSesion(req, res) {
     });
 
   } catch (error) {
-    console.error("Error al actualizar sesión:", error);
+    console.error("[ERROR] Error al actualizar sesión:", error);
     return res.status(500).json({
       success: false,
       message: "Error al actualizar la sesión",
@@ -721,6 +700,7 @@ async function actualizarSesion(req, res) {
 
 /**
  * Eliminar sesión (solo moderadores/owner)
+ * Ruta: DELETE /api/sesiones/:sesionId
  */
 async function eliminarSesion(req, res) {
   try {
@@ -775,7 +755,7 @@ async function eliminarSesion(req, res) {
     });
 
   } catch (error) {
-    console.error("Error al eliminar sesión:", error);
+    console.error("[ERROR] Error al eliminar sesión:", error);
     return res.status(500).json({
       success: false,
       message: "Error al eliminar la sesión",
@@ -792,7 +772,6 @@ async function notificarSesionesCercanas() {
     const ahora = new Date();
     const en24Horas = new Date(ahora.getTime() + 24 * 60 * 60 * 1000);
 
-    // Buscar sesiones programadas que ocurren entre ahora y 24 horas
     const sesionesCercanas = await prisma.sesionLectura.findMany({
       where: {
         estado: 'PROGRAMADA',
@@ -810,8 +789,6 @@ async function notificarSesionesCercanas() {
         }
       }
     });
-
-    console.log(`🔍 Verificando sesiones cercanas: ${sesionesCercanas.length} encontradas`);
 
     for (const sesion of sesionesCercanas) {
       const horasRestantes = Math.round((new Date(sesion.fechaHora) - ahora) / (1000 * 60 * 60));
@@ -839,16 +816,14 @@ async function notificarSesionesCercanas() {
           },
           null
         );
-
-        console.log(`📢 Notificación enviada: Sesión "${sesion.titulo}" en ${horasRestantes}h`);
       } catch (notifError) {
-        console.error(`⚠️ Error al notificar sesión cercana (${sesion.id}):`, notifError.message);
+        console.error(`[ERROR] Error al notificar sesión cercana (${sesion.id}):`, notifError.message);
       }
     }
 
     return { count: sesionesCercanas.length };
   } catch (error) {
-    console.error('❌ Error al verificar sesiones cercanas:', error);
+    console.error('[ERROR] Error al verificar sesiones cercanas:', error);
     return { count: 0, error: error.message };
   }
 }
