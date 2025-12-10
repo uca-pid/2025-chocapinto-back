@@ -1,22 +1,20 @@
-// utils/scheduledTasks.js
+/**
+ * Utilidad: Scheduled Tasks
+ * Sistema de tareas programadas para notificaciones periódicas.
+ */
+
 const { notificarVotacionesPorVencer } = require('../controllers/periodo.controller');
 const { notificarSesionesCercanas } = require('../controllers/sesion.controller');
 
 /**
- * Ejecutar todas las verificaciones periódicas
- * Esta función debería ser llamada por un cron job o endpoint periódico
+ * Ejecuta todas las verificaciones periódicas.
+ * Esta función debería ser llamada por un cron job o endpoint periódico.
+ * @returns {Promise<Object>} Resultado de las verificaciones con contadores
  */
 async function ejecutarVerificacionesPeriodicas() {
-  console.log('🕐 Ejecutando verificaciones periódicas...');
-  
   try {
-    // Verificar votaciones que vencen pronto
     const resultadoVotaciones = await notificarVotacionesPorVencer();
-    console.log(`✅ Votaciones verificadas: ${resultadoVotaciones.count} notificaciones enviadas`);
-    
-    // Verificar sesiones cercanas
     const resultadoSesiones = await notificarSesionesCercanas();
-    console.log(`✅ Sesiones verificadas: ${resultadoSesiones.count} notificaciones enviadas`);
     
     return {
       success: true,
@@ -24,7 +22,7 @@ async function ejecutarVerificacionesPeriodicas() {
       sesiones: resultadoSesiones.count
     };
   } catch (error) {
-    console.error('❌ Error en verificaciones periódicas:', error);
+    console.error('[ERROR] Error en verificaciones periódicas:', error);
     return {
       success: false,
       error: error.message
@@ -33,15 +31,12 @@ async function ejecutarVerificacionesPeriodicas() {
 }
 
 /**
- * Iniciar verificaciones periódicas cada hora
+ * Inicia verificaciones periódicas cada hora.
+ * Ejecuta inmediatamente al iniciar y luego cada 3600000 ms (1 hora).
  */
 function iniciarVerificacionesAutomaticas() {
-  console.log('🚀 Iniciando verificaciones automáticas (cada 1 hora)...');
-  
-  // Ejecutar inmediatamente al iniciar
   ejecutarVerificacionesPeriodicas();
   
-  // Luego ejecutar cada hora (3600000 ms = 1 hora)
   setInterval(ejecutarVerificacionesPeriodicas, 3600000);
 }
 
