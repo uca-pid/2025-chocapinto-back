@@ -1,6 +1,9 @@
-// src/controllers/ranking.controller.js
 const prisma = require('../db');
 
+/**
+ * Obtiene el ranking de usuarios de un club
+ * Ruta: GET /api/club/:clubId/ranking
+ */
 const getUsersRanking = async (req, res) => {
   try {
     const clubId = Number(req.params.clubId);
@@ -9,9 +12,6 @@ const getUsersRanking = async (req, res) => {
       return res.status(400).json({ success: false, message: "ID de club inválido" });
     }
 
-    console.log("Obteniendo ranking para club:", clubId);
-
-    // Verificar que el club existe
     const club = await prisma.club.findUnique({
       where: { id: clubId },
       include: { 
@@ -27,11 +27,9 @@ const getUsersRanking = async (req, res) => {
       return res.status(404).json({ success: false, message: "Club no encontrado" });
     }
 
-    // Obtener estadísticas de usuarios activos en el club
     const usersStats = await Promise.all(
       club.memberships.map(async (membership) => {
         const user = membership.user;
-        // Contar comentarios del usuario en libros de este club
         const commentsCount = await prisma.comment.count({
           where: {
             userId: user.id,
@@ -41,7 +39,6 @@ const getUsersRanking = async (req, res) => {
           }
         });
 
-        // Contar libros agregados por el usuario a este club
         const booksAddedCount = await prisma.clubBook.count({
           where: {
             addedById: user.id,
@@ -49,7 +46,6 @@ const getUsersRanking = async (req, res) => {
           }
         });
 
-        // Calcular score total (comentarios + libros agregados * 2)
         const totalScore = commentsCount + (booksAddedCount * 2);
 
         return {
@@ -62,13 +58,10 @@ const getUsersRanking = async (req, res) => {
       })
     );
 
-    // Ordenar por score total (descendente)
     const ranking = usersStats
-      .filter(user => user.totalScore > 0) // Solo usuarios con actividad
+      .filter(user => user.totalScore > 0)
       .sort((a, b) => b.totalScore - a.totalScore)
-      .slice(0, 10); // Top 10
-
-    console.log("Ranking calculado:", ranking.length, "usuarios activos");
+      .slice(0, 10);
 
     res.json({
       success: true,
@@ -79,7 +72,7 @@ const getUsersRanking = async (req, res) => {
       ranking
     });
   } catch (error) {
-    console.error("Error al obtener ranking:", error);
+    console.error("[ERROR] Error al obtener ranking:", error);
     res.status(500).json({ success: false, message: "Error al obtener ranking" });
   }
 };
