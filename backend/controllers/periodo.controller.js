@@ -1,6 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const { computeNewXpAndLevel, XP_PER_BOOK_FINISHED } = require('../utils/XPSystem');
+const { computeNewXpAndLevel, XP_REWARDS } = require('../utils/XPRewards');
 const { notificarMiembrosClub, crearNotificacion } = require('./notificaciones.controller');
 const { otorgarXP } = require('../utils/XPRewards');
 
@@ -660,7 +660,7 @@ const concluirLectura = async (req, res) => {
 
                 for (const miembro of miembros) {
                     const oldLevel = miembro.user.level || 1;
-                    const { xp, level } = computeNewXpAndLevel(miembro.user, XP_PER_BOOK_FINISHED);
+                    const { xp, level } = computeNewXpAndLevel(miembro.user, XP_REWARDS.COMPLETAR_LIBRO);
 
                     await tx.user.update({
                         where: { id: miembro.userId },
@@ -672,12 +672,12 @@ const concluirLectura = async (req, res) => {
                             miembro.userId,
                             'NIVEL_SUBIDO',
                             '🎉 ¡Subiste de nivel!',
-                            `¡Felicidades! Ahora eres nivel ${level}. Ganaste ${XP_PER_BOOK_FINISHED} XP por completar la lectura.`,
+                            `¡Felicidades! Ahora eres nivel ${level}. Ganaste ${XP_REWARDS.COMPLETAR_LIBRO} XP por completar la lectura.`,
                             { 
                                 oldLevel, 
                                 newLevel: level, 
                                 xp,
-                                xpGanado: XP_PER_BOOK_FINISHED
+                                xpGanado: XP_REWARDS.COMPLETAR_LIBRO
                             }
                         ).catch(err => console.error('[ERROR] Error al notificar nivel subido:', err));
                     }
