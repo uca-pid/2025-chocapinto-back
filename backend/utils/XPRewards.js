@@ -1,11 +1,12 @@
 /**
- * Utilidad: XP Rewards System
- * Sistema de recompensas de experiencia para acciones del usuario.
+ * Sistema de Experiencia (XP) y Recompensas
+ * Maneja el cálculo de niveles y otorgamiento de XP por acciones del usuario.
  */
 
 const prisma = require('../db');
-const { computeNewXpAndLevel } = require('./XPSystem');
 const { crearNotificacion } = require('../controllers/notificaciones.controller');
+
+const XP_PER_LEVEL = 500;
 
 const XP_REWARDS = {
   COMPLETAR_LIBRO: 100,
@@ -20,6 +21,26 @@ const XP_REWARDS = {
   ASISTIR_SESION: 25,
   ORGANIZAR_SESION: 30
 };
+
+/**
+ * Calcula el nuevo XP y nivel después de ganar experiencia.
+ * @param {Object} user - Objeto usuario con xp y level actuales
+ * @param {number} xpGained - Cantidad de XP ganada
+ * @returns {Object} Objeto con xp y level actualizados
+ */
+function computeNewXpAndLevel(user, xpGained) {
+  const currentXp = user.xp || 0;
+  const currentLevel = user.level || 1;
+
+  const newXp = currentXp + xpGained;
+  let newLevel = currentLevel;
+
+  while (newXp >= newLevel * XP_PER_LEVEL) {
+    newLevel++;
+  }
+
+  return { xp: newXp, level: newLevel };
+}
 
 /**
  * Otorga XP a un usuario y notifica si sube de nivel
@@ -115,7 +136,9 @@ function getAccionDescripcion(tipoAccion) {
 }
 
 module.exports = {
+  XP_PER_LEVEL,
   XP_REWARDS,
+  computeNewXpAndLevel,
   otorgarXP,
   getAccionDescripcion
 };
