@@ -1,19 +1,13 @@
 const authJWTService = require('../services/authJWT.service');
 
-/**
- * Controlador para autenticación externa OAuth 2.0
- * Implementa Client Credentials Flow para integración con APIs externas
- */
 class AuthExternalController {
   
-  /**
-   * Genera access token usando Client Credentials Flow
-   * Ruta: POST /api/external/auth/token
-   */
+  // OAuth 2.0 Client Credentials Flow - Token Endpoint
   async getAccessToken(req, res) {
     try {
       const { grant_type, client_id, client_secret, scope } = req.body;
 
+      // 1. Validar grant_type
       if (grant_type !== 'client_credentials') {
         return res.status(400).json({
           error: 'unsupported_grant_type',
@@ -21,6 +15,7 @@ class AuthExternalController {
         });
       }
 
+      // 2. Validar client_id y client_secret
       if (!client_id || !client_secret) {
         return res.status(400).json({
           error: 'invalid_request',
@@ -28,6 +23,7 @@ class AuthExternalController {
         });
       }
 
+      // 3. Verificar credenciales del cliente
       const clientValidation = authJWTService.validateClientCredentials(client_id, client_secret);
       
       if (!clientValidation.valid) {
@@ -37,9 +33,11 @@ class AuthExternalController {
         });
       }
 
+      // 4. Procesar scopes solicitados
       const requestedScopes = scope ? scope.split(' ') : [];
       const clientScopes = clientValidation.client.scopes;
       
+      // Verificar que los scopes solicitados estén permitidos para el cliente
       const invalidScopes = requestedScopes.filter(s => !clientScopes.includes(s));
       if (invalidScopes.length > 0) {
         return res.status(400).json({
@@ -48,18 +46,26 @@ class AuthExternalController {
         });
       }
 
+      // Usar todos los scopes del cliente si no se especifican
       const finalScopes = requestedScopes.length > 0 ? requestedScopes : clientScopes;
+
+      // 5. Generar tokens
       const tokens = authJWTService.generateTokenPair(client_id, finalScopes);
 
+      // 6. Log de la operación
+      console.log(`🎫 Token generado para cliente: ${client_id} con scopes: [${finalScopes.join(', ')}]`);
+
+      // 7. Respuesta OAuth 2.0 estándar
       res.json({
         access_token: tokens.access_token,
         token_type: tokens.token_type,
         expires_in: tokens.expires_in,
-        scope: tokens.scope
+        scope: tokens.scope,
+        // refresh_token: tokens.refresh_token, // Solo en casos específicos
       });
 
     } catch (error) {
-      console.error('[ERROR] Error generando access token:', error);
+      console.error('Error generando access token:', error);
       res.status(500).json({
         error: 'server_error',
         error_description: 'Internal server error during token generation'
@@ -67,10 +73,7 @@ class AuthExternalController {
     }
   }
 
-  /**
-   * Refresca un access token existente
-   * Ruta: POST /api/external/auth/refresh
-   */
+  // Endpoint para refrescar token (opcional)
   async refreshToken(req, res) {
     try {
       const { grant_type, refresh_token } = req.body;
@@ -89,6 +92,7 @@ class AuthExternalController {
         });
       }
 
+      // Verificar refresh token
       const verification = authJWTService.verifyRefreshToken(refresh_token);
       
       if (!verification.valid) {
@@ -98,8 +102,9 @@ class AuthExternalController {
         });
       }
 
+      // Obtener cliente y generar nuevo access token
       const client_id = verification.client_id;
-      const clientValidation = authJWTService.validateClientCredentials(client_id, '');
+      const clientValidation = authJWTService.validateClientCredentials(client_id, ''); // Solo verificar existencia
       
       if (!clientValidation.valid) {
         return res.status(401).json({
@@ -108,6 +113,7 @@ class AuthExternalController {
         });
       }
 
+      // Generar nuevo access token
       const newAccessToken = authJWTService.generateAccessToken(client_id, clientValidation.client.scopes);
 
       res.json({
@@ -118,7 +124,7 @@ class AuthExternalController {
       });
 
     } catch (error) {
-      console.error('[ERROR] Error refrescando token:', error);
+      console.error('Error refrescando token:', error);
       res.status(500).json({
         error: 'server_error',
         error_description: 'Internal server error during token refresh'
@@ -126,10 +132,7 @@ class AuthExternalController {
     }
   }
 
-  /**
-   * Inspecciona un token para verificar su validez (RFC 7662)
-   * Ruta: POST /api/external/auth/introspect
-   */
+  // Endpoint para inspeccionar token (RFC 7662)
   async introspectToken(req, res) {
     try {
       const { token, token_type_hint } = req.body;
@@ -141,18 +144,23 @@ class AuthExternalController {
         });
       }
 
+      // Intentar verificar como access token
       let verification = authJWTService.verifyAccessToken(token);
       let tokenType = 'access_token';
 
+      // Si falla, intentar como refresh token
       if (!verification.valid && token_type_hint !== 'access_token') {
         verification = authJWTService.verifyRefreshToken(token);
         tokenType = 'refresh_token';
       }
 
       if (!verification.valid) {
-        return res.json({ active: false });
+        return res.json({
+          active: false
+        });
       }
 
+      // Obtener información adicional del token
       const tokenInfo = authJWTService.getTokenInfo(token);
 
       res.json({
@@ -166,7 +174,7 @@ class AuthExternalController {
       });
 
     } catch (error) {
-      console.error('[ERROR] Error introspecting token:', error);
+      console.error('Error introspecting token:', error);
       res.status(500).json({
         error: 'server_error',
         error_description: 'Internal server error during token introspection'
@@ -174,10 +182,7 @@ class AuthExternalController {
     }
   }
 
-  /**
-   * Retorna metadata del servidor de autorización (RFC 8414)
-   * Ruta: GET /api/external/auth/.well-known/oauth-authorization-server
-   */
+  // Información sobre el servidor de autorización (RFC 8414)
   async getAuthorizationServerMetadata(req, res) {
     try {
       const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -193,7 +198,7 @@ class AuthExternalController {
         service_documentation: `${baseUrl}/api/external/docs`
       });
     } catch (error) {
-      console.error('[ERROR] Error getting server metadata:', error);
+      console.error('Error getting server metadata:', error);
       res.status(500).json({
         error: 'server_error',
         error_description: 'Internal server error'
