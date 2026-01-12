@@ -1,7 +1,36 @@
-// controllers/categoria.controller.js - CORREGIR la función createCategoria
 const prisma = require('../db');
 const { validateRequiredFields } = require('../utils/validateFields');
 
+const CATEGORIAS_ESTATICAS = ["Ficción", "No Ficción", "Ciencia Ficción", "Fantasía", "Ensayo"];
+
+/**
+ * Obtiene todas las categorías disponibles
+ * Ruta: GET /api/categorias
+ */
+const getCategorias = async (req, res) => {
+  try {
+    for (const nombre of CATEGORIAS_ESTATICAS) {
+      await prisma.categoria.upsert({
+        where: { nombre },
+        update: {},
+        create: { nombre }
+      });
+    }
+    
+    const categorias = await prisma.categoria.findMany({
+      orderBy: { nombre: 'asc' }
+    });
+    res.json({ success: true, categorias });
+  } catch (error) {
+    console.error("[ERROR] Error al obtener categorías:", error);
+    res.status(500).json({ success: false, message: "Error al obtener categorías" });
+  }
+};
+
+/**
+ * Crea una nueva categoría
+ * Ruta: POST /api/categorias
+ */
 const createCategoria = async (req, res) => {
   try {
     const { nombre } = req.body;
@@ -11,11 +40,10 @@ const createCategoria = async (req, res) => {
       return res.status(400).json({ success: false, message: "Nombre de categoría requerido" });
     }
 
-    // CORREGIR: Usar contains en lugar de equals con mode
     const existingCategoria = await prisma.categoria.findFirst({
       where: { 
         nombre: {
-          equals: nombre.trim() // Sin mode: "insensitive"
+          equals: nombre.trim()
         }
       }
     });
@@ -30,41 +58,15 @@ const createCategoria = async (req, res) => {
 
     res.json({ success: true, categoria });
   } catch (error) {
-    console.error("Error al crear categoría:", error);
+    console.error("[ERROR] Error al crear categoría:", error);
     res.status(500).json({ success: false, message: "Error al crear categoría" });
   }
 };
 
-// Resto de funciones...
-const getCategorias = async (req, res) => {
-  try {
-    // Insertar categorías por defecto si no existen
-    const categoriasEstaticas = [
-      "Ficción",
-      "No Ficción", 
-      "Ciencia Ficción",
-      "Fantasía",
-      "Ensayo"
-    ];
-
-    for (const nombre of categoriasEstaticas) {
-      await prisma.categoria.upsert({
-        where: { nombre },
-        update: {},
-        create: { nombre }
-      });
-    }
-    
-    const categorias = await prisma.categoria.findMany({
-      orderBy: { nombre: 'asc' }
-    });
-    res.json({ success: true, categorias });
-  } catch (error) {
-    console.error("Error al obtener categorías:", error);
-    res.status(500).json({ success: false, message: "Error al obtener categorías" });
-  }
-};
-
+/**
+ * Actualiza una categoría existente
+ * Ruta: PUT /api/categorias/:id
+ */
 const updateCategoria = async (req, res) => {
   try {
     const categoriaId = Number(req.params.id);
@@ -79,9 +81,7 @@ const updateCategoria = async (req, res) => {
       return res.status(404).json({ success: false, message: "Categoría no encontrada" });
     }
 
-    // Categorías que no se pueden editar
-    const categoriasEstaticas = ["Ficción", "No Ficción", "Ciencia Ficción", "Fantasía", "Ensayo"];
-    if (categoriasEstaticas.includes(categoria.nombre)) {
+    if (CATEGORIAS_ESTATICAS.includes(categoria.nombre)) {
       return res.status(403).json({ success: false, message: "No se puede editar esta categoría predeterminada" });
     }
 
@@ -91,11 +91,15 @@ const updateCategoria = async (req, res) => {
     });
     res.json({ success: true, categoria: updated });
   } catch (error) {
-    console.error("Error al editar categoría:", error);
+    console.error("[ERROR] Error al editar categoría:", error);
     res.status(500).json({ success: false, message: "Error al editar categoría" });
   }
 };
 
+/**
+ * Elimina una categoría
+ * Ruta: DELETE /api/categorias/:id
+ */
 const deleteCategoria = async (req, res) => {
   try {
     const categoriaId = Number(req.params.id);
@@ -108,13 +112,10 @@ const deleteCategoria = async (req, res) => {
       return res.status(404).json({ success: false, message: "Categoría no encontrada" });
     }
 
-    // Categorías que no se pueden eliminar
-    const categoriasEstaticas = ["Ficción", "No Ficción", "Ciencia Ficción", "Fantasía", "Ensayo"];
-    if (categoriasEstaticas.includes(categoria.nombre)) {
+    if (CATEGORIAS_ESTATICAS.includes(categoria.nombre)) {
       return res.status(403).json({ success: false, message: "No se puede eliminar esta categoría predeterminada" });
     }
 
-    // Verificar si está en uso y desconectar de todos los libros
     const booksUsingCategory = await prisma.book.findMany({
       where: {
         categorias: {
@@ -124,9 +125,6 @@ const deleteCategoria = async (req, res) => {
     });
 
     if (booksUsingCategory.length > 0) {
-      console.log(`Desconectando categoría "${categoria.nombre}" de ${booksUsingCategory.length} libros`);
-      
-      // Desconectar la categoría de todos los libros que la usan
       for (const book of booksUsingCategory) {
         await prisma.book.update({
           where: { id: book.id },
@@ -139,7 +137,6 @@ const deleteCategoria = async (req, res) => {
       }
     }
 
-    // Ahora eliminar la categoría
     await prisma.categoria.delete({ where: { id: categoriaId } });
     
     const message = booksUsingCategory.length > 0 
@@ -148,7 +145,7 @@ const deleteCategoria = async (req, res) => {
     
     res.json({ success: true, message });
   } catch (error) {
-    console.error("Error al eliminar categoría:", error);
+    console.error("[ERROR] Error al eliminar categoría:", error);
     res.status(500).json({ success: false, message: "Error al eliminar categoría" });
   }
 };

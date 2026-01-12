@@ -16,6 +16,12 @@ const periodoRoutes = require('./routes/periodo.routes');
 const rankingGlobalRoutes = require('./routes/ranking.global.routes');
 const apiBooksyRoutes = require('./routes/api_booksy.routes');
 const authExternalRoutes = require('./routes/auth.external.routes');
+const sesionRoutes = require('./routes/sesion.routes');
+const notificacionesRoutes = require('./routes/notificaciones.routes');
+const scheduledRoutes = require('./routes/scheduled.routes');
+
+// Importar tareas programadas
+const { iniciarVerificacionesAutomaticas } = require('./utils/scheduledTasks');
 
 const app = express();
 
@@ -66,6 +72,9 @@ app.use('/api/history', historyRoutes);
 app.use('/api/ranking', rankingRoutes);
 app.use('/api', periodoRoutes);
 app.use('/api/global/ranking', rankingGlobalRoutes);
+app.use('/api/sesiones', sesionRoutes);
+app.use('/api/notificaciones', notificacionesRoutes);
+app.use('/api/scheduled', scheduledRoutes);
 
 
 // Rutas legacy (mantener compatibilidad)
@@ -79,12 +88,15 @@ app.use('/', historyRoutes);
 app.use('/', rankingRoutes);
 app.use('/', periodoRoutes);
 app.use('/', rankingGlobalRoutes);
+app.use('/sesion', sesionRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-  console.log(`📚 API disponible en http://localhost:${PORT}`);
-  console.log(`🔐 OAuth 2.0 Token endpoint: http://localhost:${PORT}/api/external/auth/token`);
+  
+  console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
+  // Iniciar verificaciones automáticas de notificaciones
+  
+  iniciarVerificacionesAutomaticas();
 });
 
 module.exports = app;

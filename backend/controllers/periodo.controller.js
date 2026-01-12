@@ -1,23 +1,19 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const { computeNewXpAndLevel, XP_PER_BOOK_FINISHED } = require('../utils/xpSystem');
-
-// ========== ENDPOINT A: ESTADO ACTUAL DEL CLUB ==========
+const { computeNewXpAndLevel, XP_REWARDS } = require('../utils/XPRewards');
+const { notificarMiembrosClub, crearNotificacion } = require('./notificaciones.controller');
+const { otorgarXP } = require('../utils/XPRewards');
 
 /**
- * Obtiene el estado actual del club (el más importante)
- * GET /api/club/:clubId/estado-actual
+ * Obtiene el estado actual del club
+ * Ruta: GET /api/club/:clubId/estado-actual
  */
 const obtenerEstadoActual = async (req, res) => {
     try {
         const clubId = parseInt(req.params.clubId);
 
-        console.log(`🔍 Consultando estado actual del club ${clubId}`);
-
-        // ⏰ VERIFICACIÓN AUTOMÁTICA DE VENCIMIENTOS
         await verificarYCerrarVencimientos(clubId);
 
-        // 1. Buscar período en VOTACION
         let periodoActivo = await prisma.periodoLectura.findFirst({
             where: {
                 clubId: clubId,
@@ -47,9 +43,6 @@ const obtenerEstadoActual = async (req, res) => {
         });
 
         if (periodoActivo) {
-            console.log(`🗳️ Club en estado VOTACION - Período: ${periodoActivo.nombre}`);
-            
-            // Calcular votos por opción
             const opcionesConVotos = periodoActivo.opciones.map(opcion => ({
                 ...opcion,
                 totalVotos: opcion.votos.length,
@@ -67,7 +60,6 @@ const obtenerEstadoActual = async (req, res) => {
             });
         }
 
-        // 2. Buscar período en LEYENDO
         periodoActivo = await prisma.periodoLectura.findFirst({
             where: {
                 clubId: clubId,
@@ -83,8 +75,6 @@ const obtenerEstadoActual = async (req, res) => {
         });
 
         if (periodoActivo) {
-            console.log(`📚 Club en estado LEYENDO - Libro: ${periodoActivo.libroGanador?.book?.title}`);
-            
             return res.json({
                 success: true,
                 estado: 'LEYENDO',
@@ -92,8 +82,6 @@ const obtenerEstadoActual = async (req, res) => {
             });
         }
 
-        // 3. No hay período activo
-        console.log(`😴 Club inactivo - No hay período de lectura`);
         return res.json({
             success: true,
             estado: 'INACTIVO',
@@ -101,7 +89,7 @@ const obtenerEstadoActual = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error al obtener estado actual:', error);
+        console.error('[ERROR] Error al obtener estado actual:', error);
         return res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -110,25 +98,15 @@ const obtenerEstadoActual = async (req, res) => {
     }
 };
 
-// ========== ENDPOINT B: CREAR VOTACIÓN ==========
-
 /**
  * Crear nuevo período de lectura con votación
- * POST /api/club/:clubId/periodos
+ * Ruta: POST /api/club/:clubId/periodos
  */
 const crearPeriodo = async (req, res) => {
     try {
         const clubId = parseInt(req.params.clubId);
         const { nombre, fechaFinVotacion, fechaFinLectura, clubBookIds, username } = req.body;
 
-        console.log(`🆕 Creando período de lectura en club ${clubId}:`, { 
-            nombre, 
-            libros: clubBookIds?.length,
-            clubBookIds: clubBookIds,
-            createdBy: username 
-        });
-
-        // Debug: Verificar club
         const club = await prisma.club.findUnique({
             where: { id: clubId }
         });
@@ -139,10 +117,6 @@ const crearPeriodo = async (req, res) => {
                 message: `Club con ID ${clubId} no encontrado`
             });
         }
-        
-        console.log(`🏠 Club encontrado: ${club.name}`);
-
-        // 1. Verificar permisos del usuario
         const user = await prisma.user.findUnique({
             where: { username: username }
         });
@@ -165,10 +139,6 @@ const crearPeriodo = async (req, res) => {
         const isOwner = await prisma.club.findFirst({
             where: { id: clubId, id_owner: user.id }
         });
-
-        
-
-        // 2. Verificar que no haya período activo
         const periodoExistente = await prisma.periodoLectura.findFirst({
             where: {
                 clubId: clubId,
@@ -185,7 +155,6 @@ const crearPeriodo = async (req, res) => {
             });
         }
 
-        // 3. Validar fechas
         const fechaVotacion = new Date(fechaFinVotacion);
         const fechaLectura = new Date(fechaFinLectura);
         const ahora = new Date();
@@ -204,9 +173,6 @@ const crearPeriodo = async (req, res) => {
             });
         }
 
-        // 4. Verificar que los libros existan y estén "por leer"
-        console.log(`🔍 Verificando libros: ${clubBookIds} en club ${clubId}`);
-        
         const librosDisponibles = await prisma.clubBook.findMany({
             where: {
                 id: { in: clubBookIds },
@@ -217,9 +183,6 @@ const crearPeriodo = async (req, res) => {
                 book: true
             }
         });
-
-        console.log(`📚 Libros encontrados: ${librosDisponibles.length} de ${clubBookIds.length}`);
-        console.log('Libros disponibles:', librosDisponibles.map(l => `ID:${l.id} - ${l.book.title}`));
 
         if (librosDisponibles.length !== clubBookIds.length) {
             const librosEncontrados = librosDisponibles.map(l => l.id);
@@ -233,15 +196,6 @@ const crearPeriodo = async (req, res) => {
             });
         }
 
-        // 5. Crear el período con sus opciones
-        console.log(`📝 Creando período con datos:`, {
-            clubId: clubId,
-            nombre: nombre,
-            fechaFinVotacion: fechaVotacion,
-            fechaFinLectura: fechaLectura,
-            opciones: clubBookIds.map(id => ({ clubBookId: parseInt(id) }))
-        });
-        
         const nuevoPeriodo = await prisma.periodoLectura.create({
             data: {
                 clubId: clubId,
@@ -268,8 +222,39 @@ const crearPeriodo = async (req, res) => {
             }
         });
 
-        console.log(`✅ Período creado exitosamente: ${nuevoPeriodo.id}`);
+        try {
+            const fechaFormateada = new Date(fechaFinVotacion).toLocaleDateString('es-ES', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
 
+            const librosNombres = nuevoPeriodo.opciones
+                .map(o => o.clubBook.book.title)
+                .join(', ');
+
+            await notificarMiembrosClub(
+                clubId,
+                'VOTACION_ABIERTA',
+                'Nueva votación abierta',
+                `Se ha iniciado una votación para el período "${nombre}". Los libros disponibles son: ${librosNombres}. La votación cierra el ${fechaFormateada}.`,
+                {
+                    periodoId: nuevoPeriodo.id,
+                    nombre: nombre,
+                    fechaFinVotacion: fechaFinVotacion,
+                    clubName: club.name,
+                    libros: nuevoPeriodo.opciones.map(o => ({
+                        id: o.clubBook.id,
+                        titulo: o.clubBook.book.title
+                    }))
+                },
+                user.id
+            );
+        } catch (notifError) {
+            console.error('[ERROR] Error al enviar notificaciones (no crítico):', notifError.message);
+        }
         return res.json({
             success: true,
             message: `Período "${nombre}" creado exitosamente`,
@@ -277,7 +262,7 @@ const crearPeriodo = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error al crear período:', error);
+        console.error('[ERROR] Error al crear período:', error);
         return res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -286,20 +271,14 @@ const crearPeriodo = async (req, res) => {
     }
 };
 
-// ========== ENDPOINT C: VOTAR ==========
-
 /**
  * Votar por una opción en un período
- * POST /api/periodo/:periodoId/votar
+ * Ruta: POST /api/periodo/:periodoId/votar
  */
 const votar = async (req, res) => {
     try {
         const periodoId = parseInt(req.params.periodoId);
         const { opcionId, username } = req.body;
-
-        console.log(`🗳️ Procesando voto en período ${periodoId}:`, { opcionId, username });
-
-        // 1. Verificar usuario
         const user = await prisma.user.findUnique({
             where: { username: username }
         });
@@ -311,7 +290,6 @@ const votar = async (req, res) => {
             });
         }
 
-        // 2. Verificar que el período esté en VOTACION
         const periodo = await prisma.periodoLectura.findUnique({
             where: { id: periodoId },
             include: {
@@ -333,7 +311,6 @@ const votar = async (req, res) => {
             });
         }
 
-        // 3. Verificar que el usuario sea miembro del club
         const esMiembro = await prisma.clubMember.findFirst({
             where: {
                 userId: user.id,
@@ -350,7 +327,6 @@ const votar = async (req, res) => {
             });
         }
 
-        // 4. Verificar que la opción pertenezca a este período
         const opcion = await prisma.votacionOpcion.findFirst({
             where: {
                 id: parseInt(opcionId),
@@ -365,7 +341,6 @@ const votar = async (req, res) => {
             });
         }
 
-        // 5. Verificar que no haya votado ya por esta opción
         const votoExistente = await prisma.voto.findUnique({
             where: {
                 opcionId_userId: {
@@ -382,7 +357,17 @@ const votar = async (req, res) => {
             });
         }
 
-        // 6. Eliminar cualquier voto previo del usuario en este período
+        const votosPrevios = await prisma.voto.findMany({
+            where: {
+                userId: user.id,
+                opcion: {
+                    periodoId: periodoId
+                }
+            }
+        });
+        
+        const yaHabiaVotado = votosPrevios.length > 0;
+
         await prisma.voto.deleteMany({
             where: {
                 userId: user.id,
@@ -392,7 +377,6 @@ const votar = async (req, res) => {
             }
         });
 
-        // 7. Registrar el nuevo voto
         const nuevoVoto = await prisma.voto.create({
             data: {
                 opcionId: parseInt(opcionId),
@@ -411,7 +395,9 @@ const votar = async (req, res) => {
             }
         });
 
-        console.log(`✅ Voto registrado: ${user.username} → ${nuevoVoto.opcion.clubBook.book.title}`);
+        if (!yaHabiaVotado) {
+            await otorgarXP(user.id, 'VOTAR');
+        }
 
         return res.json({
             success: true,
@@ -420,7 +406,7 @@ const votar = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error al votar:', error);
+        console.error('[ERROR] Error al votar:', error);
         return res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -429,20 +415,14 @@ const votar = async (req, res) => {
     }
 };
 
-// ========== ENDPOINT D: CERRAR VOTACIÓN ==========
-
 /**
  * Cerrar votación y determinar ganador
- * PUT /api/periodo/:periodoId/cerrar-votacion
+ * Ruta: PUT /api/periodo/:periodoId/cerrar-votacion
  */
 const cerrarVotacion = async (req, res) => {
     try {
         const periodoId = parseInt(req.params.periodoId);
         const { username } = req.body;
-
-        console.log(`🏁 Cerrando votación del período ${periodoId} por ${username}`);
-
-        // 1. Verificar usuario y permisos
         const user = await prisma.user.findUnique({
             where: { username: username }
         });
@@ -503,7 +483,6 @@ const cerrarVotacion = async (req, res) => {
             });
         }
 
-        // 2. Contar votos y determinar ganador
         const resultados = periodo.opciones.map(opcion => ({
             opcion,
             votos: opcion.votos.length
@@ -516,7 +495,6 @@ const cerrarVotacion = async (req, res) => {
             });
         }
 
-        // Verificar si hay empate y manejar selección aleatoria
         const maxVotos = resultados[0].votos;
         const empatados = resultados.filter(r => r.votos === maxVotos);
         
@@ -524,23 +502,12 @@ const cerrarVotacion = async (req, res) => {
         let esEmpate = false;
         
         if (empatados.length > 1) {
-            // HAY EMPATE - Elegir ganador al azar
             esEmpate = true;
             const indiceAleatorio = Math.floor(Math.random() * empatados.length);
             ganador = empatados[indiceAleatorio];
-            
-            console.log(`🎲 EMPATE detectado entre ${empatados.length} libros con ${maxVotos} votos:`);
-            empatados.forEach((emp, i) => {
-                const marca = i === indiceAleatorio ? '🏆 GANADOR AL AZAR' : '❌';
-                console.log(`   ${marca} ${emp.opcion.clubBook.book.title} - ${emp.votos} votos`);
-            });
         } else {
-            // Ganador claro
             ganador = resultados[0];
-            console.log(`🏆 Ganador claro: ${ganador.opcion.clubBook.book.title} con ${ganador.votos} votos`);
         }
-
-        // 3. Actualizar período y libro ganador en transacción
         const resultado = await prisma.$transaction(async (tx) => {
             // Actualizar período a LEYENDO
             const periodoActualizado = await tx.periodoLectura.update({
@@ -560,11 +527,25 @@ const cerrarVotacion = async (req, res) => {
             return periodoActualizado;
         });
 
-        const mensajeResultado = esEmpate ? 
-            `🎲 Votación cerrada con EMPATE - Ganador aleatorio: ${ganador.opcion.clubBook.book.title} (${ganador.votos} votos)` :
-            `🏆 Votación cerrada - Ganador: ${ganador.opcion.clubBook.book.title} con ${ganador.votos} votos`;
-
-        console.log(mensajeResultado);
+        try {
+            await notificarMiembrosClub(
+                periodo.clubId,
+                'VOTACION_CERRADA',
+                'Votación cerrada',
+                `La votación "${periodo.nombre}" ha finalizado. El libro ganador es: "${ganador.opcion.clubBook.book.title}"`,
+                {
+                    periodoId: periodo.id,
+                    nombre: periodo.nombre,
+                    clubName: periodo.club.name,
+                    libroGanador: ganador.opcion.clubBook.book.title,
+                    votosGanador: ganador.votos,
+                    empate: esEmpate
+                },
+                user.id
+            );
+        } catch (notifError) {
+            console.error('[ERROR] Error al enviar notificaciones (no crítico):', notifError.message);
+        }
 
         return res.json({
             success: true,
@@ -588,7 +569,7 @@ const cerrarVotacion = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error al cerrar votación:', error);
+        console.error('[ERROR] Error al cerrar votación:', error);
         return res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -597,20 +578,14 @@ const cerrarVotacion = async (req, res) => {
     }
 };
 
-// ========== ENDPOINT E: CONCLUIR LECTURA ==========
-
 /**
  * Concluir período de lectura
- * PUT /api/periodo/:periodoId/concluir-lectura
+ * Ruta: PUT /api/periodo/:periodoId/concluir-lectura
  */
 const concluirLectura = async (req, res) => {
     try {
         const periodoId = parseInt(req.params.periodoId);
         const { username } = req.body;
-
-        console.log(`📖 Concluyendo lectura del período ${periodoId} por ${username}`);
-
-        // 1. Verificar usuario y permisos
         const user = await prisma.user.findUnique({
             where: { username: username }
         });
@@ -666,15 +641,12 @@ const concluirLectura = async (req, res) => {
             });
         }
 
-        // 2. Actualizar período y libro en transacción
         const resultado = await prisma.$transaction(async (tx) => {
-            // Actualizar período a CERRADO
             const periodoActualizado = await tx.periodoLectura.update({
                 where: { id: periodoId },
                 data: { estado: 'CERRADO' }
             });
 
-            // Actualizar estado del libro a leído
             if (periodo.libroGanadorId) {
                 await tx.clubBook.update({
                     where: { id: periodo.libroGanadorId },
@@ -687,21 +659,33 @@ const concluirLectura = async (req, res) => {
                 });
 
                 for (const miembro of miembros) {
-                    const { xp, level } = computeNewXpAndLevel(miembro.user, XP_PER_BOOK_FINISHED);
+                    const oldLevel = miembro.user.level || 1;
+                    const { xp, level } = computeNewXpAndLevel(miembro.user, XP_REWARDS.COMPLETAR_LIBRO);
 
                     await tx.user.update({
                         where: { id: miembro.userId },
                         data: { xp, level }
                     });
-                    console.log('XP actualizada - userId=${miembro.userId} xp=${xp} level=${level}');
+                    
+                    if (level > oldLevel) {
+                        crearNotificacion(
+                            miembro.userId,
+                            'NIVEL_SUBIDO',
+                            '🎉 ¡Subiste de nivel!',
+                            `¡Felicidades! Ahora eres nivel ${level}. Ganaste ${XP_REWARDS.COMPLETAR_LIBRO} XP por completar la lectura.`,
+                            { 
+                                oldLevel, 
+                                newLevel: level, 
+                                xp,
+                                xpGanado: XP_REWARDS.COMPLETAR_LIBRO
+                            }
+                        ).catch(err => console.error('[ERROR] Error al notificar nivel subido:', err));
+                    }
                 }
             }
-            
 
             return periodoActualizado;
         });
-
-        console.log(`✅ Período de lectura concluido: ${periodo.nombre}`);
 
         return res.json({
             success: true,
@@ -711,7 +695,7 @@ const concluirLectura = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error al concluir lectura:', error);
+        console.error('[ERROR] Error al concluir lectura:', error);
         return res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -720,17 +704,13 @@ const concluirLectura = async (req, res) => {
     }
 };
 
-// ========== ENDPOINT EXTRA: HISTORIAL DE PERÍODOS ==========
-
 /**
- * Obtener historial de períodos del club
- * GET /api/club/:clubId/periodos/historial
+ * Obtiene historial de períodos del club
+ * Ruta: GET /api/club/:clubId/periodos/historial
  */
 const obtenerHistorial = async (req, res) => {
     try {
         const clubId = parseInt(req.params.clubId);
-
-        console.log(`📚 Obteniendo historial de períodos del club ${clubId}`);
 
         const historial = await prisma.periodoLectura.findMany({
             where: {
@@ -759,7 +739,6 @@ const obtenerHistorial = async (req, res) => {
             }
         });
 
-        // Procesar datos para el frontend
         const historialProcesado = historial.map(periodo => ({
             ...periodo,
             opciones: periodo.opciones.map(opcion => ({
@@ -775,7 +754,7 @@ const obtenerHistorial = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error al obtener historial:', error);
+        console.error('[ERROR] Error al obtener historial:', error);
         return res.status(500).json({
             success: false,
             message: 'Error interno del servidor',
@@ -784,17 +763,13 @@ const obtenerHistorial = async (req, res) => {
     }
 };
 
-// ========== ENDPOINT DEBUG: LISTAR LIBROS DEL CLUB ==========
-
 /**
- * Debugging: Ver qué libros tiene un club
- * GET /api/club/:clubId/libros-debug
+ * Ver qué libros tiene un club (debug)
+ * Ruta: GET /api/club/:clubId/libros-debug
  */
 const debugLibrosClub = async (req, res) => {
     try {
         const clubId = parseInt(req.params.clubId);
-        
-        console.log(`🐞 DEBUG: Listando libros del club ${clubId}`);
         
         const libros = await prisma.clubBook.findMany({
             where: {
@@ -805,8 +780,6 @@ const debugLibrosClub = async (req, res) => {
                 club: true
             }
         });
-        
-        console.log(`📚 Libros encontrados: ${libros.length}`);
         
         return res.json({
             success: true,
@@ -823,7 +796,7 @@ const debugLibrosClub = async (req, res) => {
         });
         
     } catch (error) {
-        console.error('❌ Error en debug libros:', error);
+        console.error('[ERROR] Error en debug libros:', error);
         return res.status(500).json({
             success: false,
             error: error.message
@@ -831,24 +804,18 @@ const debugLibrosClub = async (req, res) => {
     }
 };
 
-// ========== FUNCIÓN AUXILIAR: VERIFICAR VENCIMIENTOS ==========
-
 /**
  * Verifica y cierra automáticamente períodos vencidos
- * @param {number} clubId - ID del club
  */
 const verificarYCerrarVencimientos = async (clubId) => {
     try {
         const ahora = new Date();
-        console.log(`⏰ Verificando vencimientos para club ${clubId} - ${ahora.toISOString()}`);
-
-        // 1. Verificar votaciones vencidas
         const votacionesVencidas = await prisma.periodoLectura.findMany({
             where: {
                 clubId: clubId,
                 estado: 'VOTACION',
                 fechaFinVotacion: {
-                    lt: ahora // menor que la fecha actual
+                    lt: ahora
                 }
             },
             include: {
@@ -869,19 +836,15 @@ const verificarYCerrarVencimientos = async (clubId) => {
             }
         });
 
-        // Cerrar votaciones vencidas automáticamente
         for (const votacion of votacionesVencidas) {
-            console.log(`🗳️ AUTO-CERRANDO votación vencida: ${votacion.nombre}`);
             await cerrarVotacionAutomatica(votacion);
         }
-
-        // 2. Verificar lecturas vencidas
         const lecturasVencidas = await prisma.periodoLectura.findMany({
             where: {
                 clubId: clubId,
                 estado: 'LEYENDO',
                 fechaFinLectura: {
-                    lt: ahora // menor que la fecha actual
+                    lt: ahora
                 }
             },
             include: {
@@ -893,36 +856,26 @@ const verificarYCerrarVencimientos = async (clubId) => {
             }
         });
 
-        // Concluir lecturas vencidas automáticamente
         for (const lectura of lecturasVencidas) {
-            console.log(`📚 AUTO-CONCLUYENDO lectura vencida: ${lectura.nombre}`);
             await concluirLecturaAutomatica(lectura);
         }
 
-        if (votacionesVencidas.length === 0 && lecturasVencidas.length === 0) {
-            console.log(`✅ No hay períodos vencidos para club ${clubId}`);
-        }
-
     } catch (error) {
-        console.error('❌ Error al verificar vencimientos:', error);
+        console.error('[ERROR] Error al verificar vencimientos:', error);
     }
 };
 
 /**
- * Cierra una votación automáticamente (lógica similar a cerrarVotacion pero sin req/res)
+ * Cierra una votación automáticamente
  */
 const cerrarVotacionAutomatica = async (periodo) => {
     try {
-        console.log(`🤖 CERRANDO AUTOMÁTICAMENTE votación: ${periodo.nombre}`);
-
-        // Contar votos por opción
         const resultados = periodo.opciones.map(opcion => ({
             opcion,
             votos: opcion.votos.length
         })).sort((a, b) => b.votos - a.votos);
 
         if (resultados.length === 0 || resultados[0].votos === 0) {
-            // Sin votos - marcar como cerrado sin ganador
             await prisma.periodoLectura.update({
                 where: { id: periodo.id },
                 data: {
@@ -930,20 +883,27 @@ const cerrarVotacionAutomatica = async (periodo) => {
                     updatedAt: new Date()
                 }
             });
-            console.log(`⚠️ Votación cerrada automáticamente SIN VOTOS: ${periodo.nombre}`);
+
+            try {
+                await notificarMiembrosClub(
+                    periodo.clubId,
+                    'VOTACION_CERRADA',
+                    'Votación finalizada',
+                    `La votación "${periodo.nombre}" ha expirado sin votos suficientes.`,
+                    {
+                        periodoId: periodo.id,
+                        nombre: periodo.nombre
+                    },
+                    null
+                );
+            } catch (notifError) {
+                console.error('[ERROR] Error al enviar notificaciones:', notifError.message);
+            }
             return;
         }
 
-        // Determinar ganador
         const ganador = resultados[0];
-        const esEmpate = resultados.length > 1 && resultados[1].votos === ganador.votos;
 
-        if (esEmpate) {
-            // En caso de empate, tomar el primero (o implementar lógica de desempate)
-            console.log(`⚖️ EMPATE detectado, tomando primera opción: ${ganador.opcion.clubBook.book.title}`);
-        }
-
-        // Actualizar el período con el libro ganador
         await prisma.periodoLectura.update({
             where: { id: periodo.id },
             data: {
@@ -953,7 +913,6 @@ const cerrarVotacionAutomatica = async (periodo) => {
             }
         });
 
-        // Actualizar estado del libro ganador a "leyendo" para todos los miembros
         await prisma.clubBook.updateMany({
             where: {
                 id: ganador.opcion.clubBookId
@@ -963,21 +922,16 @@ const cerrarVotacionAutomatica = async (periodo) => {
             }
         });
 
-        console.log(`✅ Votación cerrada automáticamente - Ganador: ${ganador.opcion.clubBook.book.title}`);
-
     } catch (error) {
-        console.error('❌ Error al cerrar votación automáticamente:', error);
+        console.error('[ERROR] Error al cerrar votación automáticamente:', error);
     }
 };
 
 /**
- * Concluye una lectura automáticamente (lógica similar a concluirLectura pero sin req/res)
+ * Concluye una lectura automáticamente
  */
 const concluirLecturaAutomatica = async (periodo) => {
     try {
-        console.log(`🤖 CONCLUYENDO AUTOMÁTICAMENTE lectura: ${periodo.nombre}`);
-
-        // Actualizar el período a CERRADO
         await prisma.periodoLectura.update({
             where: { id: periodo.id },
             data: {
@@ -986,7 +940,6 @@ const concluirLecturaAutomatica = async (periodo) => {
             }
         });
 
-        // Actualizar estado del libro a "leido" para todos los miembros del club
         if (periodo.libroGanadorId) {
             await prisma.clubBook.updateMany({
                 where: {
@@ -997,11 +950,87 @@ const concluirLecturaAutomatica = async (periodo) => {
                 }
             });
 
-            console.log(`✅ Lectura concluida automáticamente - Libro: ${periodo.libroGanador?.book?.title}`);
+            try {
+                await notificarMiembrosClub(
+                    periodo.clubId,
+                    'LECTURA_FINALIZADA',
+                    'Período de lectura finalizado',
+                    `El período de lectura "${periodo.nombre}" ha concluido. ¡Ya puedes comentar sobre el libro!`,
+                    {
+                        periodoId: periodo.id,
+                        nombre: periodo.nombre,
+                        libroGanador: periodo.libroGanador?.book?.title
+                    },
+                    null
+                );
+            } catch (notifError) {
+                console.error('[ERROR] Error al enviar notificaciones:', notifError.message);
+            }
         }
 
     } catch (error) {
-        console.error('❌ Error al concluir lectura automáticamente:', error);
+        console.error('[ERROR] Error al concluir lectura automáticamente:', error);
+    }
+};
+
+/**
+ * Verificar y notificar votaciones que vencen en menos de 24 horas
+ */
+const notificarVotacionesPorVencer = async () => {
+    try {
+        const ahora = new Date();
+        const en24Horas = new Date(ahora.getTime() + 24 * 60 * 60 * 1000);
+
+        const votacionesPorVencer = await prisma.periodoLectura.findMany({
+            where: {
+                estado: 'VOTACION',
+                fechaFinVotacion: {
+                    gte: ahora,
+                    lte: en24Horas
+                }
+            },
+            include: {
+                club: true,
+                opciones: {
+                    include: {
+                        clubBook: {
+                            include: {
+                                book: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        for (const periodo of votacionesPorVencer) {
+            const horasRestantes = Math.round((new Date(periodo.fechaFinVotacion) - ahora) / (1000 * 60 * 60));
+            const librosNombres = periodo.opciones.map(o => o.clubBook.book.title).join(', ');
+
+            try {
+                await notificarMiembrosClub(
+                    periodo.clubId,
+                    'VOTACION_POR_VENCER',
+                    '⏰ Votación termina pronto',
+                    `La votación "${periodo.nombre}" cierra en aproximadamente ${horasRestantes} horas. ¡No olvides votar! Libros disponibles: ${librosNombres}`,
+                    {
+                        periodoId: periodo.id,
+                        nombre: periodo.nombre,
+                        clubName: periodo.club.name,
+                        horasRestantes,
+                        fechaFinVotacion: periodo.fechaFinVotacion
+                    },
+                    null
+                );
+            } catch (notifError) {
+                console.error(`[ERROR] Error al notificar votación por vencer (${periodo.id}):`, notifError.message);
+            }
+        }
+
+        return { count: votacionesPorVencer.length };
+    } catch (error) {
+        console.error('[ERROR] Error al verificar votaciones por vencer:', error);
+        return { count: 0, error: error.message };
     }
 };
 
@@ -1012,5 +1041,6 @@ module.exports = {
     cerrarVotacion,
     concluirLectura,
     obtenerHistorial,
-    debugLibrosClub
+    debugLibrosClub,
+    notificarVotacionesPorVencer
 };

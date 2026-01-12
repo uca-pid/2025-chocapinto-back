@@ -2,11 +2,15 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/user.controller');
+const { authenticateUser } = require('../middleware/userAuth.middleware');
 
-// Rutas de usuario
+// Rutas públicas
 router.get('/user/:idOrUsername', userController.getUserByIdOrUsername);
-router.put('/updateUser', userController.updateUser);
-router.post('/deleteUser', userController.deleteUser);
-router.get('/user/:username/clubs', userController.getMyClubs); // <--- NUEVA RUTA IMPLEMENTADA
-router.put('/users/:userId/update-avatar', userController.updateAvatarSelection); // <--- NUEVA RUTA PARA AVATAR
+
+// Rutas protegidas (requieren autenticación)
+router.put('/updateUser', authenticateUser, userController.updateUser);
+router.post('/deleteUser', authenticateUser, userController.deleteUser);
+router.get('/user/:username/clubs', authenticateUser, userController.getMyClubs); 
+router.put('/users/:userId/update-avatar', authenticateUser, userController.updateAvatarSelection); 
+
 module.exports = router;

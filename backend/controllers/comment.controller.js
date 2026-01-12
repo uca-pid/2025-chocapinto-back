@@ -1,79 +1,65 @@
 // src/controllers/comment.controller.js
 const prisma = require('../db');
-const { validateRequiredFields } = require('../utils/validateFields');
+const { otorgarXP } = require('../utils/XPRewards');
 
+/**
+ * Obtiene los comentarios de un libro en un club específico
+ * Ruta: GET /api/club/:clubId/book/:bookId/comments
+ */
 const getComments = async (req, res) => {
   try {
     const clubId = Number(req.params.clubId);
     const bookId = Number(req.params.bookId);
 
-    console.log("Obteniendo comentarios para club:", clubId, "y libro:", bookId);
-
     if (!clubId || !bookId) {
-      console.log("IDs inválidos:", { clubId, bookId });
       return res.status(400).json({ success: false, message: "IDs inválidos" });
     }
 
-    // Primero buscar el ClubBook
     const clubBook = await prisma.clubBook.findFirst({
-      where: {
-        clubId: clubId,
-        bookId: bookId
-      }
+      where: { clubId, bookId }
     });
 
-    console.log("ClubBook encontrado:", clubBook);
-
     if (!clubBook) {
-      console.log("ClubBook no encontrado para club:", clubId, "y libro:", bookId);
-      // Retornar array vacío en lugar de error para permitir que se muestren 0 comentarios
       return res.json({ success: true, comments: [] });
     }
 
-    // Buscar comentarios usando el clubBookId
     const comments = await prisma.comment.findMany({
       where: { clubBookId: clubBook.id },
       include: { user: { select: { username: true } } },
       orderBy: { createdAt: 'desc' }
     });
 
-    console.log("Comentarios encontrados:", comments.length);
-
     const formattedComments = comments.map(comment => ({
       id: comment.id,
-      content: comment.content, // Usar 'content' según el schema
-      texto: comment.content,   // Mantener 'texto' para compatibilidad con frontend
+      content: comment.content,
+      texto: comment.content,
       username: comment.user.username,
       createdAt: comment.createdAt
     }));
 
     res.json({ success: true, comments: formattedComments });
   } catch (error) {
-    console.error("Error al obtener comentarios:", error);
+    console.error("[ERROR] Error al obtener comentarios:", error);
     res.status(500).json({ success: false, message: "Error al obtener comentarios" });
   }
 };
 
-// Función legacy para obtener comentarios con parámetros en orden diferente
+/**
+ * Obtiene comentarios (ruta legacy con orden de parámetros diferente)
+ * Ruta: GET /comentario/book/:bookId/club/:clubId
+ */
 const getCommentsLegacy = async (req, res) => {
   try {
-    // En la ruta legacy: /comentario/book/:bookId/club/:clubId
     const bookId = Number(req.params.bookId);
     const clubId = Number(req.params.clubId);
 
-    console.log("Obteniendo comentarios legacy para club:", clubId, "y libro:", bookId);
-
     if (!clubId || !bookId) {
-      console.log("IDs inválidos:", { clubId, bookId });
       return res.status(400).json({ success: false, message: "IDs inválidos" });
     }
 
     const clubBook = await prisma.clubBook.findUnique({
       where: {
-        clubId_bookId: {
-          clubId: clubId,
-          bookId: bookId
-        }
+        clubId_bookId: { clubId, bookId }
       }
     });
     
@@ -95,11 +81,10 @@ const getCommentsLegacy = async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Formatear comentarios para incluir userId en el nivel superior
     const formattedComentarios = comentarios.map(c => ({
       id: c.id,
       content: c.content,
-      userId: c.userId, // Agregar userId al nivel superior
+      userId: c.userId,
       createdAt: c.createdAt,
       user: {
         id: c.user.id,
@@ -110,37 +95,39 @@ const getCommentsLegacy = async (req, res) => {
 
     res.json({ success: true, comentarios: formattedComentarios });
   } catch (error) {
-    console.error("Error al obtener comentarios:", error);
+    console.error("[ERROR] Error al obtener comentarios (legacy):", error);
     res.status(500).json({ success: false, message: "Error al obtener comentarios" });
   }
 };
 
+/**
+ * Crea un nuevo comentario en un libro del club
+ * Ruta: POST /api/club/:clubId/book/:bookId/comments
+ */
 const createComment = async (req, res) => {
   try {
     const clubId = Number(req.params.clubId);
     const bookId = Number(req.params.bookId);
     const { texto, content, username } = req.body;
 
-    console.log("Creando comentario:", { clubId, bookId, texto, content, username });
-
-    // El contenido puede venir como 'texto' o 'content'
     const commentContent = content || texto;
 
     if (!commentContent || !username) {
-      return res.status(400).json({ success: false, message: "Faltan datos requeridos: content/texto y username" });
+      return res.status(400).json({ 
+        success: false, 
+        message: "Faltan datos requeridos: content/texto y username" 
+      });
     }
 
     if (!clubId || !bookId) {
       return res.status(400).json({ success: false, message: "IDs inválidos" });
     }
 
-    // Verificar usuario
     const user = await prisma.user.findUnique({ where: { username } });
     if (!user) {
       return res.status(404).json({ success: false, message: "Usuario no encontrado" });
     }
 
-    // Verificar que existe la relación ClubBook
     const clubBook = await prisma.clubBook.findFirst({
       where: { clubId, bookId }
     });
@@ -149,39 +136,54 @@ const createComment = async (req, res) => {
       return res.status(404).json({ success: false, message: "El libro no está en este club" });
     }
 
-    // Crear comentario usando el modelo Comment correcto
+    const comentariosAnteriores = await prisma.comment.count({
+      where: {
+        userId: user.id,
+        clubBookId: clubBook.id
+      }
+    });
+
+    const esPrimerComentario = comentariosAnteriores === 0;
+
     const comment = await prisma.comment.create({
       data: {
         content: commentContent.trim(),
         userId: user.id,
-        clubBookId: clubBook.id  // Usar clubBookId según el schema
+        clubBookId: clubBook.id
       },
       include: { user: { select: { username: true } } }
     });
+
+    if (esPrimerComentario) {
+      await otorgarXP(user.id, 'PRIMER_COMENTARIO_LIBRO');
+    } else {
+      await otorgarXP(user.id, 'COMENTARIO_ADICIONAL');
+    }
 
     res.json({
       success: true,
       comment: {
         id: comment.id,
         content: comment.content,
-        texto: comment.content, // Para compatibilidad
+        texto: comment.content,
         username: comment.user.username,
         createdAt: comment.createdAt
       }
     });
   } catch (error) {
-    console.error("Error al crear comentario:", error);
+    console.error("[ERROR] Error al crear comentario:", error);
     res.status(500).json({ success: false, message: "Error al crear comentario" });
   }
 };
-// Función legacy para manejar la ruta POST /comentario
+
+/**
+ * Crea un comentario (ruta legacy con body diferente)
+ * Ruta: POST /comentario
+ */
 const createCommentLegacy = async (req, res) => {
   try {
     const { userId, bookId, clubId, content, texto } = req.body;
 
-    console.log("Creando comentario legacy:", req.body);
-
-    // El contenido puede venir como 'content' o 'texto'
     const commentContent = content || texto;
 
     if (!commentContent || !userId || !bookId || !clubId) {
@@ -191,13 +193,11 @@ const createCommentLegacy = async (req, res) => {
       });
     }
 
-    // Verificar usuario por ID
     const user = await prisma.user.findUnique({ where: { id: Number(userId) } });
     if (!user) {
       return res.status(404).json({ success: false, message: "Usuario no encontrado" });
     }
 
-    // Verificar que existe la relación ClubBook
     const clubBook = await prisma.clubBook.findFirst({
       where: { 
         clubId: Number(clubId), 
@@ -209,7 +209,15 @@ const createCommentLegacy = async (req, res) => {
       return res.status(404).json({ success: false, message: "El libro no está en este club" });
     }
 
-    // Crear comentario usando el modelo Comment
+    const comentariosAnteriores = await prisma.comment.count({
+      where: {
+        userId: Number(userId),
+        clubBookId: clubBook.id
+      }
+    });
+
+    const esPrimerComentario = comentariosAnteriores === 0;
+
     const comment = await prisma.comment.create({
       data: {
         content: commentContent.trim(),
@@ -218,6 +226,12 @@ const createCommentLegacy = async (req, res) => {
       },
       include: { user: { select: { username: true } } }
     });
+
+    if (esPrimerComentario) {
+      await otorgarXP(Number(userId), 'PRIMER_COMENTARIO_LIBRO');
+    } else {
+      await otorgarXP(Number(userId), 'COMENTARIO_ADICIONAL');
+    }
 
     res.json({
       success: true,
@@ -229,24 +243,40 @@ const createCommentLegacy = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error al crear comentario legacy:", error);
+    console.error("[ERROR] Error al crear comentario (legacy):", error);
     res.status(500).json({ success: false, message: "Error al crear comentario" });
   }
 };
 
-const deleteComment= async (req, res) => {
-  const comentarioId = Number(req.params.id);
-  if (!comentarioId) {
-    return res.status(400).json({ success: false, message: "ID de comentario inválido" });
-  }
+/**
+ * Elimina un comentario por ID
+ * Ruta: DELETE /api/comments/:id
+ */
+const deleteComment = async (req, res) => {
   try {
+    const comentarioId = Number(req.params.id);
+    
+    if (!comentarioId) {
+      return res.status(400).json({ success: false, message: "ID de comentario inválido" });
+    }
+
     const comentario = await prisma.comment.findUnique({ where: { id: comentarioId } });
+    
     if (!comentario) {
       return res.status(404).json({ success: false, message: "Comentario no encontrado" });
     }
+    // ✅ VALIDACIÓN: Solo el autor o un admin puede eliminar
+    if (comentario.userId !== req.user.userId && req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'No puedes eliminar comentarios de otros usuarios' 
+      });
+    }
     await prisma.comment.delete({ where: { id: comentarioId } });
+    
     res.json({ success: true, message: "Comentario eliminado" });
   } catch (error) {
+    console.error("[ERROR] Error al eliminar comentario:", error);
     res.status(500).json({ success: false, message: "Error al eliminar comentario" });
   }
 };
