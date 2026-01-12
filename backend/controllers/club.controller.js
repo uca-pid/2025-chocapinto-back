@@ -1,15 +1,7 @@
 // src/controllers/club.controller.js
 const prisma = require('../db');
 const { validateRequiredFields } = require('../utils/validateFields');
-const { crearNotificacion } = require('./notificaciones.controller');
-const { otorgarXP } = require('../utils/XPRewards');
 
-const DEFAULT_CLUB_IMAGE = "https://img.lovepik.com/png/20231109/book-cartoon-illustration-school-start-reading-reading-book_539915_wh860.png";
-
-/**
- * Crea un nuevo club de lectura
- * Ruta: POST /api/club
- */
 const createClub = async (req, res) => {
   try {
     const { name, description, ownerUsername, imagen } = req.body;
@@ -18,24 +10,25 @@ const createClub = async (req, res) => {
     if (missingFields) {
       return res.status(400).json({ success: false, message: "Faltan datos requeridos" });
     }
-    
 
-    const owner = await prisma.user.findUnique({ 
-      where: { username: req.user.username } 
-    });
+    const owner = await prisma.user.findUnique({ where: { username: ownerUsername } });
     if (!owner) {
       return res.status(404).json({ success: false, message: "Usuario no encontrado" });
     }
 
+    const defaultImg = "https://img.lovepik.com/png/20231109/book-cartoon-illustration-school-start-reading-reading-book_539915_wh860.png";
+
+    // Crear el club
     const club = await prisma.club.create({
       data: {
         name,
         description,
         id_owner: owner.id,
-        imagen: imagen || DEFAULT_CLUB_IMAGE
+        imagen: imagen || defaultImg
       }
     });
 
+    // Crear la membresía del owner con rol OWNER
     await prisma.clubMember.create({
       data: {
         userId: owner.id,
@@ -44,6 +37,7 @@ const createClub = async (req, res) => {
       }
     });
 
+    // Obtener el club con sus membresías para la respuesta
     const clubWithMembers = await prisma.club.findUnique({
       where: { id: club.id },
       include: {
@@ -55,61 +49,48 @@ const createClub = async (req, res) => {
       }
     });
 
+    // Formatear para mantener compatibilidad con el frontend
     const clubFormatted = {
-      ...clubWithMembers,
-      members: clubWithMembers.memberships.map(membership => ({
-        ...membership.user,
-        role: membership.role,
-        joinedAt: membership.joinedAt
-      }))
-    };
+  ...clubWithMembers,
+  members: clubWithMembers.memberships.map(membership => ({
+    ...membership.user,           // Esto ya incluye level y xp
+    role: membership.role,        // Agregar el rol
+    joinedAt: membership.joinedAt // Agregar fecha de unión
+  }))
+};
 
     res.json({ success: true, club: clubFormatted });
   } catch (error) {
-    console.error("[ERROR] Error al crear club:", error);
+    console.error("Error al crear club:", error);
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };
 
-/**
- * Elimina un club y todas sus relaciones
- * Ruta: DELETE /api/club/:id
- */
 const deleteClub = async (req, res) => {
   try {
     const clubId = Number(req.params.id);
     if (!clubId) {
       return res.status(400).json({ success: false, message: "ID inválido" });
     }
-     const club = await prisma.club.findUnique({
-      where: { id: clubId }
-    });
 
-    if (!club) {
-      return res.status(404).json({ success: false, message: "Club no encontrado" });
-    }
-
-    // ✅ VALIDACIÓN: Solo el dueño o un admin pueden eliminar
-    if (club.id_owner !== req.user.userId && req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Solo el dueño del club puede eliminarlo' 
-      });
-    }
-
+    // Usar transacción para eliminar todo relacionado al club
     await prisma.$transaction(async (tx) => {
+      // Eliminar memberships del club
       await tx.clubMember.deleteMany({
         where: { clubId: clubId }
       });
       
+      // Eliminar solicitudes del club
       await tx.clubSolicitud.deleteMany({
         where: { clubId: clubId }
       });
       
+      // Eliminar historial de lectura del club
       await tx.readingHistory.deleteMany({
         where: { clubId: clubId }
       });
       
+      // Eliminar comentarios de libros del club
       const clubBooks = await tx.clubBook.findMany({
         where: { clubId: clubId }
       });
@@ -120,24 +101,22 @@ const deleteClub = async (req, res) => {
         });
       }
       
+      // Eliminar libros del club
       await tx.clubBook.deleteMany({
         where: { clubId: clubId }
       });
       
+      // Finalmente eliminar el club
       await tx.club.delete({ where: { id: clubId } });
     });
 
     res.json({ success: true, message: "Club eliminado correctamente" });
   } catch (error) {
-    console.error("[ERROR] Error al eliminar club:", error);
+    console.error("Error al eliminar club:", error);
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };
 
-/**
- * Obtiene todos los clubes
- * Ruta: GET /api/club
- */
 const getAllClubs = async (req, res) => {
   try {
     const clubs = await prisma.club.findMany({
@@ -150,26 +129,23 @@ const getAllClubs = async (req, res) => {
       }
     });
     
+    // Transformar para mantener compatibilidad con el frontend
     const clubsFormatted = clubs.map(club => ({
-      ...club,
-      members: club.memberships.map(membership => ({
-        ...membership.user,
-        role: membership.role,
-        joinedAt: membership.joinedAt
-      }))
-    }));
+  ...club,
+  members: club.memberships.map(membership => ({
+    ...membership.user,           // Incluye level, xp, etc.
+    role: membership.role,
+    joinedAt: membership.joinedAt
+  }))
+}));
     
     res.json({ success: true, clubs: clubsFormatted });
   } catch (error) {
-    console.error("[ERROR] Error al obtener clubes:", error);
+    console.error("Error al obtener clubes:", error);
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };
 
-/**
- * Obtiene un club por ID con todos sus detalles
- * Ruta: GET /api/club/:id
- */
 const getClubById = async (req, res) => {
   try {
     const clubId = Number(req.params.id);
@@ -193,7 +169,8 @@ const getClubById = async (req, res) => {
         },
         memberships: {
           include: {
-            user: true
+            user: true,
+            
           }
         }
       }
@@ -206,9 +183,8 @@ const getClubById = async (req, res) => {
     const solicitudes = club.solicitudes ? club.solicitudes.map(s => ({
       id: s.id,
       username: s.user.username,
-      avatar: s.user.avatar,
       estado: s.estado,
-      fecha_solicitud: s.createdAt
+      createdAt: s.createdAt
     })) : [];
     
     let ownerName = null;
@@ -229,7 +205,6 @@ const getClubById = async (req, res) => {
         ownerName,
         imagen: club.imagen,
         readBooks: club.clubBooks.map(clubBook => ({
-          clubBookId: clubBook.id,
           id: clubBook.book.id,
           title: clubBook.book.title,
           author: clubBook.book.author,
@@ -247,19 +222,18 @@ const getClubById = async (req, res) => {
           role: membership.role,
           level: membership.user.level,
           avatar: membership.user.avatar
+
+          
         })) : []
       },
     });
   } catch (error) {
-    console.error("[ERROR] Error al buscar club:", error);
+    console.error("Error al buscar club:", error);
     res.status(500).json({ success: false, message: "Error al buscar club" });
   }
 };
 
-/**
- * Crea una solicitud para unirse a un club
- * Ruta: POST /api/club/join
- */
+// Continúo con más funciones del controlador...
 const joinClub = async (req, res) => {
   try {
     const { clubId, username } = req.body;
@@ -274,6 +248,7 @@ const joinClub = async (req, res) => {
       return res.status(404).json({ success: false, message: "Usuario no encontrado" });
     }
 
+    // Revisar si ya existe una solicitud pendiente
     const solicitudExistente = await prisma.clubSolicitud.findFirst({
       where: { clubId: Number(clubId), userId: user.id, estado: "pendiente" }
     });
@@ -281,6 +256,7 @@ const joinClub = async (req, res) => {
       return res.json({ success: false, message: "Ya tienes una solicitud pendiente" });
     }
 
+    // Revisar si ya es miembro
     const existingMembership = await prisma.clubMember.findUnique({
       where: {
         userId_clubId: {
@@ -293,6 +269,7 @@ const joinClub = async (req, res) => {
       return res.json({ success: false, message: "Ya eres miembro del club" });
     }
 
+    // Crear solicitud
     const solicitud = await prisma.clubSolicitud.create({
       data: {
         clubId: Number(clubId),
@@ -302,15 +279,11 @@ const joinClub = async (req, res) => {
     });
     res.json({ success: true, message: "Solicitud enviada", solicitud });
   } catch (error) {
-    console.error("[ERROR] Error al crear solicitud:", error);
+    console.error("Error al crear solicitud:", error);
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };
 
-/**
- * Acepta o rechaza una solicitud de membresía
- * Ruta: POST /api/club/:clubId/solicitud/:solicitudId
- */
 const manageMembershipRequest = async (req, res) => {
   try {
     const clubId = Number(req.params.clubId);
@@ -334,12 +307,14 @@ const manageMembershipRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: "La solicitud ya fue gestionada" });
     }
 
+    // Actualizar estado
     const nuevoEstado = aceptar ? "aceptada" : "rechazada";
     await prisma.clubSolicitud.update({
       where: { id: solicitudId },
       data: { estado: nuevoEstado }
     });
 
+    // Si se acepta, agregar usuario al club
     if (aceptar) {
       await prisma.clubMember.create({
         data: {
@@ -348,56 +323,21 @@ const manageMembershipRequest = async (req, res) => {
           role: 'LECTOR'
         }
       });
-      
-      try {
-        await crearNotificacion(
-          solicitud.userId,
-          'SOLICITUD_ACEPTADA',
-          '✅ Solicitud aceptada',
-          `Tu solicitud para unirte a "${solicitud.club.name}" ha sido aceptada. ¡Bienvenido!`,
-          { 
-            clubId: clubId, 
-            clubName: solicitud.club.name 
-          }
-        );
-        
-        await otorgarXP(solicitud.userId, 'UNIRSE_CLUB');
-      } catch (notifError) {
-        console.error('[ERROR] Error al enviar notificación de solicitud aceptada:', notifError.message);
-      }
-    } else {
-      try {
-        await crearNotificacion(
-          solicitud.userId,
-          'SOLICITUD_RECHAZADA',
-          '❌ Solicitud rechazada',
-          `Tu solicitud para unirte a "${solicitud.club.name}" ha sido rechazada.`,
-          { 
-            clubId: clubId, 
-            clubName: solicitud.club.name 
-          }
-        );
-      } catch (notifError) {
-        console.error('[ERROR] Error al enviar notificación de solicitud rechazada:', notifError.message);
-      }
     }
 
     res.json({ success: true, message: aceptar ? "Usuario agregado al club" : "Solicitud rechazada" });
   } catch (error) {
-    console.error("[ERROR] Error al gestionar solicitud:", error);
+    console.error("Error al gestionar solicitud:", error);
     res.status(500).json({ success: false, message: "Error del servidor" });
   }
 };
 
-/**
- * Elimina un miembro del club
- * Ruta: DELETE /api/club/:clubId/member/:userId
- */
 const removeMember = async (req, res) => {
   try {
     const clubId = Number(req.params.clubId);
     const userId = Number(req.params.userId);
 
+    // Verificar que el usuario a eliminar no sea el owner
     const club = await prisma.club.findUnique({ where: { id: clubId } });
     if (club.id_owner === userId) {
       return res.status(400).json({ success: false, message: "No puedes eliminar al moderador" });
@@ -414,19 +354,21 @@ const removeMember = async (req, res) => {
 
     res.json({ success: true, message: "Usuario eliminado del club" });
   } catch (error) {
-    console.error("[ERROR] Error al eliminar usuario:", error);
+    console.error("Error al eliminar usuario:", error);
     res.status(500).json({ success: false, message: "Error al eliminar usuario" });
   }
 };
 
-/**
- * Obtiene información de usuarios con roles (debug)
- * Ruta: GET /api/club/:clubId/debug/roles
- */
+// Función de debug para ver usuarios con roles
 const debugUsersWithRoles = async (req, res) => {
   try {
     const { clubId } = req.params;
     
+    console.log('\n🔍 =========================');
+    console.log('🔍 DEBUG USERS WITH ROLES');
+    console.log('🔍 =========================');
+    
+    // Obtener todos los miembros del club directamente desde ClubMember
     const clubMembers = await prisma.clubMember.findMany({
       where: { clubId: parseInt(clubId) },
       include: {
@@ -435,9 +377,27 @@ const debugUsersWithRoles = async (req, res) => {
       }
     });
     
+    console.log(`\n📋 Club ID: ${clubId}`);
+    console.log(`📋 Total members found: ${clubMembers.length}\n`);
+    
+    clubMembers.forEach((membership, index) => {
+      console.log(`${index + 1}. User: ${membership.user.username} (ID: ${membership.user.id})`);
+      console.log(`   Role: ${membership.role}`);
+      console.log(`   Joined: ${membership.joinedAt}`);
+      console.log(`   ----------------`);
+    });
+    
+    // También obtener info del club
     const club = await prisma.club.findUnique({
       where: { id: parseInt(clubId) }
     });
+    
+    if (club) {
+      console.log(`\n🏛️  Club info:`);
+      console.log(`   Name: ${club.name}`);
+      console.log(`   Owner ID (legacy): ${club.id_owner}`);
+      console.log(`   ----------------\n`);
+    }
     
     res.json({
       success: true,
@@ -456,7 +416,7 @@ const debugUsersWithRoles = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[ERROR] Error al obtener usuarios con roles:', error);
+    console.error('❌ Error al obtener usuarios con roles:', error);
     res.status(500).json({ 
       success: false, 
       message: "Error al obtener usuarios con roles",
@@ -465,16 +425,16 @@ const debugUsersWithRoles = async (req, res) => {
   }
 };
 
-/**
- * Cambia el rol de un miembro del club
- * Ruta: PUT /api/club/:clubId/member/:userId/role
- */
+// Cambiar rol de un miembro del club
 const changeUserRole = async (req, res) => {
   try {
     const clubId = Number(req.params.clubId);
     const userId = Number(req.params.userId);
     const { newRole } = req.body;
 
+    console.log(`🔄 Cambiando rol del usuario ${userId} en club ${clubId} a: ${newRole}`);
+
+    // Validar que el nuevo rol sea válido
     if (!['OWNER', 'MODERADOR', 'LECTOR'].includes(newRole)) {
       return res.status(400).json({ 
         success: false, 
@@ -482,11 +442,13 @@ const changeUserRole = async (req, res) => {
       });
     }
 
+    // Verificar que el club existe
     const club = await prisma.club.findUnique({ where: { id: clubId } });
     if (!club) {
       return res.status(404).json({ success: false, message: "Club no encontrado" });
     }
 
+    // Verificar que el usuario existe como miembro del club
     const existingMembership = await prisma.clubMember.findUnique({
       where: {
         userId_clubId: {
@@ -506,6 +468,7 @@ const changeUserRole = async (req, res) => {
       });
     }
 
+    // No permitir cambiar el rol del owner original
     if (club.id_owner === userId && newRole !== 'OWNER') {
       return res.status(400).json({ 
         success: false, 
@@ -513,6 +476,7 @@ const changeUserRole = async (req, res) => {
       });
     }
 
+    // Actualizar el rol del usuario
     const updatedMembership = await prisma.clubMember.update({
       where: {
         userId_clubId: {
@@ -528,6 +492,8 @@ const changeUserRole = async (req, res) => {
       }
     });
 
+    console.log(`✅ Rol actualizado exitosamente`);
+    
     res.json({
       success: true,
       message: `Rol de ${updatedMembership.user.username} actualizado a ${newRole}`,
@@ -539,7 +505,7 @@ const changeUserRole = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[ERROR] Error al cambiar rol del usuario:', error);
+    console.error('❌ Error al cambiar rol del usuario:', error);
     res.status(500).json({ 
       success: false, 
       message: "Error del servidor al cambiar el rol",

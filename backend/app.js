@@ -27,7 +27,6 @@ app.use('/api/categorias', categoriaRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api', periodoRoutes);
 
-
 // Mantener rutas legacy para compatibilidad
 app.use('/', userRoutes);
 app.use('/', clubRoutes);

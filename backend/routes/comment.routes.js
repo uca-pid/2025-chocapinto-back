@@ -1,14 +1,13 @@
-// backend/routes/comment.routes.js
+// src/routes/comment.routes.js
 const express = require('express');
 const router = express.Router();
 const commentController = require('../controllers/comment.controller');
-const { authenticateUser } = require('../middleware/userAuth.middleware');
 
-// Rutas públicas
+
+
+// Rutas legacy para compatibilidad
 router.get('/comentario/book/:bookId/club/:clubId', commentController.getCommentsLegacy);
-
-// Rutas protegidas (requieren autenticación)
-router.post('/comentario', authenticateUser, commentController.createCommentLegacy);
-router.delete('/comentario/:id', authenticateUser, commentController.deleteComment);
+router.post('/comentario', commentController.createCommentLegacy);
+router.delete('/comentario/:id', commentController.deleteComment);
 
 module.exports = router;
