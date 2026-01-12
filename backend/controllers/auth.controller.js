@@ -5,6 +5,8 @@ const prisma = require('../db');
 const { sendPasswordResetEmail } = require("../utils/mail");
 const { hashPassword, comparePassword } = require('../utils/hashPassword');
 const { validateRequiredFields, validateEmail, validatePassword } = require('../utils/validateFields');
+const userAuthService = require('../services/userAuth.service');
+
 
 /**
  * Registra un nuevo usuario en el sistema
@@ -87,18 +89,22 @@ const login = async (req, res) => {
       return res.status(401).json({ success: false, message: "Credenciales inválidas" });
     }
 
+    // Generar JWT
+    const token = userAuthService.generateToken(user.id, user.username, user.role);
+
     res.json({ 
       success: true, 
       message: "Login exitoso", 
+      token, 
       role: user.role, 
-      id: user.id 
+      id: user.id,
+      username: user.username
     });
   } catch (error) {
     console.error("[ERROR] Error en login:", error);
     res.status(500).json({ success: false, message: "Error interno del servidor" });
   }
 };
-
 /**
  * Cambia la contraseña de un usuario autenticado
  * Ruta: POST /auth/change-password
